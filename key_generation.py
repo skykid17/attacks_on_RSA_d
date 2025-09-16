@@ -72,6 +72,42 @@ def gen_vulnerable_keys_fast(
 
         # loop and generate a new p
 
+def gen_strong_keys_fast(
+    nbits: int = 1024,
+    e_fixed: int = 65537
+) -> Tuple[int,int,int,int,int,int,float]:
+    """
+    Generate strong keys (e, n, d, phi, p, q, elapsed_seconds)
+    Enforce d > n^(1/4) / 3
+    - nbits: target bitlength of modulus n
+    - e_fixed: fixed public exponent (default 65537)
+    Returns (e, n, d, phi, p, q, elapsed_seconds)
+    """
+    half = nbits // 2
+    start = time.perf_counter()
+
+    while True:
+        p = getPrime(half)
+        q = getPrime(half)
+        if p == q or not (q < p < 2 * q):
+            continue
+        n = p * q
+        phi = (p - 1) * (q - 1)
+
+        try:
+            d = pow(e_fixed, -1, phi)
+        except ValueError:
+            continue
+
+        # compute exact minimum allowed d for this n according to classic Wiener's bound:
+        # min_d = ceil(n^(1/4) / 3) + 1
+        min_d = math.isqrt(math.isqrt(n)) // 3 + 1
+        if d > min_d:
+            elapsed = time.perf_counter() - start
+            return e_fixed, n, d, phi, p, q, elapsed
+
+        # loop and generate a new (p,q) pair
+
 if __name__ == "__main__":
     print("Generating vulnerable key (classic Wiener's bound 81*d^4 < n)...")
     t0 = time.perf_counter()
