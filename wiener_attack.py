@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 from math import isqrt
-from key_generation import gen_vulnerable_keys_fast, gen_strong_keys_fast
+from key_generation import gen_vulnerable_keys, gen_strong_keys
 
 def cf_expansion(n, d):
     """Compute the continued fraction expansion of n/d."""
@@ -43,7 +43,7 @@ def wiener_attack(n, e):
 
 if __name__ == '__main__':
     # Generate vulnerable RSA key
-    e, n, d, phi, p, q, elapsed = gen_vulnerable_keys_fast(nbits=1024, attempts_per_p=400)
+    e, n, d, phi, p, q, elapsed = gen_vulnerable_keys(nbits=1024, attempts_per_p=400)
     print(f"Generated vulnerable RSA key in {elapsed:.2f} seconds:")
     print(f"p = {p}\nq = {q}\nd = {d}\n")
     result = wiener_attack(n, e)
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         print(f"Found factors: \np = {p}\nq = {q}\nd = {d}")
     else:
         print("Wiener's attack failed; could not factor n.")
-    e, n, d, phi, p, q, elapsed = gen_strong_keys_fast(nbits=1024, e_fixed=65537)
+    e, n, d, phi, p, q, elapsed = gen_strong_keys(nbits=1024, e_fixed=65537)
     print(f"Generated strong RSA key in {elapsed:.2f} seconds:")
     print(f"p = {p}\nq = {q}\nd = {d}\n")
     result = wiener_attack(n, e)

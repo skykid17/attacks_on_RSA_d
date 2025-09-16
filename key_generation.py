@@ -9,7 +9,7 @@ def gcd(a: int, b: int) -> int:
         a, b = b, a % b
     return a
 
-def gen_vulnerable_keys_fast(
+def gen_vulnerable_keys(
     nbits: int = 1024,
     attempts_per_p: int = 400,
     e_fixed: int = None
@@ -72,7 +72,7 @@ def gen_vulnerable_keys_fast(
 
         # loop and generate a new p
 
-def gen_strong_keys_fast(
+def gen_strong_keys(
     nbits: int = 1024,
     e_fixed: int = 65537
 ) -> Tuple[int,int,int,int,int,int,float]:
@@ -111,8 +111,17 @@ def gen_strong_keys_fast(
 if __name__ == "__main__":
     print("Generating vulnerable key (classic Wiener's bound 81*d^4 < n)...")
     t0 = time.perf_counter()
-    e, n, d, phi, p, q, elapsed = gen_vulnerable_keys_fast(nbits=1024, attempts_per_p=400)
+    e, n, d, phi, p, q, elapsed = gen_vulnerable_keys(nbits=1024, attempts_per_p=400)
     t_total = time.perf_counter() - t0
     print(f"Done in {t_total:.2f}s (gen elapsed {elapsed:.2f}s).")
     print(f"e: {e}\nd: {d}\nn bits: {n.bit_length()}\nd bits: {d.bit_length()}")
     print("Check Wiener's bound: 81*d^4 < n ->", 81 * pow(d,4) < n)
+
+    print("\nGenerating strong key (d > n^(1/4) / 3)...")
+    t0 = time.perf_counter()
+    e, n, d, phi, p, q, elapsed = gen_strong_keys(nbits=1024, e_fixed=65537)
+    t_total = time.perf_counter() - t0
+    print(f"Done in {t_total:.2f}s (gen elapsed {elapsed:.2f}s).")
+    print(f"e: {e}\nd: {d}\nn bits: {n.bit_length()}\nd bits: {d.bit_length()}")
+    print("Check Wiener's bound: 81*d^4 < n ->", 81 * pow(d,4) < n)
+
