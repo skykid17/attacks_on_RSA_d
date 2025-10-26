@@ -1,9 +1,8 @@
 #!/usr/bin/python3
 from math import isqrt
-from key_generation import gen_vulnerable_keys, gen_strong_keys
+from key_generation import gen_small_key, gen_large_key
 
 def cf_expansion(n, d):
-    """Compute the continued fraction expansion of n/d."""
     e = []
     while d:
         q = n // d
@@ -12,7 +11,6 @@ def cf_expansion(n, d):
     return e
 
 def convergents(cf):
-    """Generate convergents from the continued fraction expansion."""
     h1, h2 = 1, 0
     k1, k2 = 0, 1
     for a in cf:
@@ -23,7 +21,6 @@ def convergents(cf):
         k2, k1 = k1, k
 
 def wiener_attack(n, e):
-    """Attempt to recover d using Wiener’s attack."""
     cf = cf_expansion(e, n)
     for k, d in convergents(cf):
         if k == 0:
@@ -43,7 +40,7 @@ def wiener_attack(n, e):
 
 if __name__ == '__main__':
     # Generate vulnerable RSA key
-    e, n, d, phi, p, q, elapsed = gen_vulnerable_keys(nbits=1024, attempts_per_p=400)
+    e, n, d, phi, p, q, elapsed = gen_small_key(nbits=2048, attempts_per_p=400)
     print(f"Generated vulnerable RSA key in {elapsed:.2f} seconds:")
     print(f"p = {p}\nq = {q}\nd = {d}\n")
     result = wiener_attack(n, e)
@@ -53,7 +50,7 @@ if __name__ == '__main__':
         print(f"Found factors: \np = {p}\nq = {q}\nd = {d}")
     else:
         print("Wiener's attack failed; could not factor n.")
-    e, n, d, phi, p, q, elapsed = gen_strong_keys(nbits=1024, e_fixed=65537)
+    e, n, d, phi, p, q, elapsed = gen_large_key(nbits=2048, e_fixed=65537)
     print(f"Generated strong RSA key in {elapsed:.2f} seconds:")
     print(f"p = {p}\nq = {q}\nd = {d}\n")
     result = wiener_attack(n, e)
