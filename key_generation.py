@@ -13,26 +13,39 @@ def gcd(a: int, b: int) -> int:
     return a
 
 
-def gen_key_with_d_range(
-    nbits: int, min_d: int, max_d: int, e_fixed: int = None, attempts_per_p: int = 400
-) -> Tuple[int, int, int, int, int, int, float]:
+def gen_p_and_q(nbits: int, attempts_per_p: int = 400) -> Tuple[int, int]:
     half = nbits // 2
 
     while True:
         p = getPrime(half)
+        if p.bit_length() < half:
+            continue
         for _ in range(attempts_per_p):
             q = getPrime(half)
-            if q == p or not (q < p < 2 * q):
+            if q == p or q.bit_length() < half:
                 continue
             n = p * q
-            phi = (p - 1) * (q - 1)
-
-            try:
-                candidate_d = getRandomRange(min_d, max_d)
-                e = pow(candidate_d, -1, phi)
-                return e, n, candidate_d, phi, p, q
-            except ValueError:
+            if n.bit_length() < nbits:
                 continue
+            return p, q
+
+
+def gen_key_with_d_range(
+    nbits: int, min_d: int, max_d: int, e_fixed: int = None, attempts_per_p: int = 400
+) -> Tuple[int, int, int, int, int, int, float]:
+    while True:
+        p, q = gen_p_and_q(nbits, attempts_per_p)
+        n = p * q
+        if n.bit_length() < nbits:
+            continue
+        phi = (p - 1) * (q - 1)
+
+        try:
+            candidate_d = getRandomRange(min_d, max_d)
+            e = pow(candidate_d, -1, phi)
+            return e, n, candidate_d, phi, p, q
+        except ValueError:
+            continue
 
 
 def gen_small_key(
@@ -60,15 +73,10 @@ def gen_mid_key(nbits: int = 128, attempts_per_p: int = 300) -> Tuple[int, int, 
 def gen_large_key(
     nbits: int = 128, e_fixed: int = 65537, attempts_per_p: int = 300
 ) -> Tuple[int, int, int, int, int, int, float]:
-    half = nbits // 2
     while True:
-        p = getPrime(half)
-        q = getPrime(half)
-        if p == q or not (q < p < 2 * q):
-            continue
+        p, q = gen_p_and_q(nbits, attempts_per_p)
         n = p * q
         phi = (p - 1) * (q - 1)
-
         try:
             d = pow(e_fixed, -1, phi)
         except ValueError:
