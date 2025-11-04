@@ -1,2 +1,3 @@
-pycryptodome
-fpylll
+cysignals==1.12.6
+fpylll==0.6.4
+pycryptodome==3.23.0

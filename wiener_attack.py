@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 from math import isqrt
-from key_generation import gen_small_key, gen_large_key
+
+from key_generation import gen_large_key, gen_small_key
+
 
 def cf_expansion(n, d):
     e = []
@@ -9,6 +11,7 @@ def cf_expansion(n, d):
         e.append(q)
         n, d = d, n % d
     return e
+
 
 def convergents(cf):
     h1, h2 = 1, 0
@@ -19,6 +22,7 @@ def convergents(cf):
         yield h, k
         h2, h1 = h1, h
         k2, k1 = k1, k
+
 
 def wiener_attack(n, e):
     cf = cf_expansion(e, n)
@@ -38,7 +42,8 @@ def wiener_attack(n, e):
                         return max(p, q), min(p, q), d
     return None
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Generate vulnerable RSA key
     e, n, d, phi, p, q, elapsed = gen_small_key(nbits=2048, attempts_per_p=400)
     print(f"Generated vulnerable RSA key in {elapsed:.2f} seconds:")

@@ -8,15 +8,18 @@ This demonstrates RSA key vulnerability analysis:
 
 Boneh-Durfee uses pure-Python polynomial root-finding (no external LLL libraries).
 """
+
 import time
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
-from key_generation import gen_small_key, gen_mid_key, gen_large_key
-from wiener_attack import wiener_attack
 from boneh_durfee import boneh_durfee_attack
+from key_generation import gen_large_key, gen_mid_key, gen_small_key
+from wiener_attack import wiener_attack
 
 
-def run_case(e: int, n: int, d: int) -> Tuple[bool, bool, Optional[Tuple[int,int,int]], Optional[Tuple[int,int,int]]]:
+def run_case(
+    e: int, n: int, d: int
+) -> Tuple[bool, bool, Optional[Tuple[int, int, int]], Optional[Tuple[int, int, int]]]:
     """Run Wiener and Boneh-Durfee on given public key and return results.
 
     Returns a tuple: (wiener_success, bd_success, wiener_result, bd_result)
@@ -38,7 +41,7 @@ def run_case(e: int, n: int, d: int) -> Tuple[bool, bool, Optional[Tuple[int,int
     # For keys with small d, k is large, so we need larger search space.
     # For demonstration: use moderate max_k
     t0 = time.perf_counter()
-    #exit after 86400 seconds (24 hours)
+    # exit after 86400 seconds (24 hours)
     try:
         bd_res = boneh_durfee_attack(n, e, m=4, delta=0.18, timeout_sec=60)
     except TimeoutError:
@@ -58,21 +61,22 @@ def run_case(e: int, n: int, d: int) -> Tuple[bool, bool, Optional[Tuple[int,int
 def main():
     """Run comparative attack demonstrations on three key types."""
     nbits = 2048
-    
+
     # 1) Small d (Wiener vulnerable)
     print("\n=== Case [1/3]: Small d ===")
-    e_s, n_s, d_s, phi_s, p_s, q_s, elapsed_s = gen_small_key(nbits=nbits)
+    e_s, n_s, d_s, phi_s, p_s, q_s = gen_small_key(nbits=nbits)
     w_s, bd_s, wres_s, bdres_s = run_case(e_s, n_s, d_s)
 
     # 2) Medium d (Wiener should fail, Boneh-Durfee succeed)
     print("\n=== Case [2/3]: Medium d ===")
-    e_m, n_m, d_m, phi_m, p_m, q_m, elapsed_m = gen_mid_key(nbits=nbits)
+    e_m, n_m, d_m, phi_m, p_m, q_m = gen_mid_key(nbits=nbits)
     w_m, bd_m, wres_m, bdres_m = run_case(e_m, n_m, d_m)
 
     # 3) Large d (strong key, both fail)
     print("\n=== Case [3/3]: Large d ===")
-    e_l, n_l, d_l, phi_l, p_l, q_l, elapsed_l = gen_large_key(nbits=nbits)
+    e_l, n_l, d_l, phi_l, p_l, q_l = gen_large_key(nbits=nbits)
     w_l, bd_l, wres_l, bdres_l = run_case(e_l, n_l, d_l)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
