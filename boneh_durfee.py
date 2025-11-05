@@ -1,14 +1,7 @@
-from typing import Optional, Tuple, List
 import math
-import time
-from key_generation import gcd
-
-try:
-    from fpylll import IntegerMatrix, LLL
-    from fpylll.gso import MatGSO
-    HAS_FPYLLL = True
-except ImportError:
-    HAS_FPYLLL = False
+from expression import Poly, x, y, remove_x_factor
+from typing import Optional, Tuple
+from fpylll import LLL, IntegerMatrix
 
 
 def _is_perfect_square(n: int) -> bool:
@@ -20,81 +13,94 @@ def _is_perfect_square(n: int) -> bool:
 
 
 def boneh_durfee_attack(
-    n: int, e: int, m: int = 4, t: int = None, X: int = None, Y: int = None,
-    delta: float = 0.18, timeout_sec: float = 60
+    n: int,
+    e: int,
+    m: int = 4,
+    X_bound: Optional[int] = None,
+    Y_bound: Optional[int] = None,
+    delta: float = 0.18,
+    timeout_sec: float = 60,
 ) -> Optional[Tuple[int, int, int]]:
+    if n % 2 == 0:
+        # n must be even, as such, we can already factorize it!
+        phi = n // 2 - 1
+        return n // 2, 2, pow(e, -1, phi)
 
-    start_time = time.time()
-    
-    # Set default parameters
-    if t is None: t = max(1, int((1 - 2 * delta) * m))
-    if X is None: X = 2 * (1 << int(n.bit_length() * delta))
-    if Y is None:
-        Y = 1 << int(n.bit_length() * 0.5)
-    
-    # Polynomial: 1 + x*(A + y) where A = (n+1)/2
-    A = (n + 1) // 2
-    
-    # Construct lattice basis from x-shifts and y-shifts
-    monomials = []
-    basis_vectors = []
-    
-    # x-shifts: x^i * N^(m-k) * poly^k for k=0..m, i=0..m-k
+    # Some default values. Y should be in the range p+q and X should be in the
+    # range e^delta.
+    if X_bound is None:
+        X_bound = 2 ** (int(n.bit_length() * delta) + 1)
+    if Y_bound is None:
+        Y_bound = 2 ** (n.bit_length() // 2 + 1)
+
+    # We are trying to solve:
+    # f(x, y) = x(A-y)-1 = 0 (mod e).
+    # A = N+1, y = p+q
+    #
+    # This is derived from:
+    # ed = -k phi(n) + 1
+    # ed = -k(N-p-q+1) + 1
+    # k(N-p-q+1) = 1 (mod e).
+    A = n + 1
+    big_x = x * Poly(X_bound)
+    big_y = y * Poly(Y_bound)
+    f = big_x * (Poly(A) - big_y) - Poly(1)
+    e_poly = Poly(e)
+
+    polynomials: list[Poly] = []
+    # Boneh and Durfee found that the best m is 7 and t is 3.
+    # That means our equations are 0 (mod e^7) and have a maximum power of y^3.
+    t = 3
     for k in range(m + 1):
-        for i in range(m - k + 1):
-            # Coefficient of x^i in (1 + x*(A+y))^k * N^(m-k)
-            coeff = (n ** (m - k))
-            monomials.append(('x', i, k))
-            vec = [0] * (m + t + 2)
-            vec[i] = coeff
-            basis_vectors.append(vec)
-    
-    # y-shifts: y^j * poly^k * N^(m-k) for selected j, k
-    for j in range(1, t + 1):
-        for k in range((m * j) // t, m + 1):
-            monomials.append(('y', j, k))
-            vec = [0] * (m + t + 2)
-            vec[m + j] = n ** (m - k)
-            basis_vectors.append(vec)
-    
-    # Attempt LLL reduction
-    try:
-        M = IntegerMatrix.from_matrix(basis_vectors)
-        gso = MatGSO(M)
-        LLL.reduction(gso)
-        reduced = [list(row) for row in M]
-    except Exception as e:
-        print(f"[Boneh-Durfee] LLL reduction failed: {e}")
-        return None
-    
-    # Extract short vectors and try to find roots
-    if time.time() - start_time > timeout_sec:
-        return None
-    
-    # Check for solution in small vectors
-    for vec_idx, vec in enumerate(reduced[:min(5, len(reduced))]):
-        # Try to extract d from this vector
-        # This is simplified; full version would use polynomial solving
-        for val in vec:
-            if val != 0 and val < e:
-                # Check if this could be d
-                if (e * val) % n == 1 or (e * val - 1) % n == 0:
-                    d_candidate = val
-                    # Verify
-                    if (e * d_candidate) % n == 1:
-                        # Factor n using d
-                        phi = (e * d_candidate - 1) // n if (e * d_candidate - 1) % n == 0 else None
-                        if phi:
-                            s = n - phi + 1
-                            disc = s * s - 4 * n
-                            if disc > 0 and _is_perfect_square(disc):
-                                sqrt_disc = math.isqrt(disc)
-                                p = (s + sqrt_disc) // 2
-                                q = (s - sqrt_disc) // 2
-                                if p * q == n and p > 1 and q > 1:
-                                    return max(p, q), min(p, q), d_candidate
-    
+        # x-shifts: x^i * f(x, y)^k * e^(m-k) = 0 (mod e^m)
+        # For each k, we use g_ik for i = 0, ..., m-k.
+        for i in range(m-k+1):
+            polynomials.append(((big_x**i) * (f**k) * (e_poly ** (m-k))))
+        # y-shifts: y^i * f(x, y)^k * e^(m-k) = 0 (mod e^m)
+        # For each k, we use h_lk for l = 1, ..., t.
+        for l_pow in range(1, t+1):
+            polynomials.append(((big_y**l_pow) * (f**k) * (e_poly ** (m-k))))
+
+    polynomials = _do_lll(polynomials)
+    print("Equations after LLL:")
+    eqn_1, eqn_2, eqn_3 = polynomials[1], polynomials[2], polynomials[3]
+    print(eqn_1)
+    print(eqn_2)
+    print(eqn_3)
+    print("Resultant was: ")
+    print(remove_x_factor(eqn_1.resultant(eqn_2)))
+    print(remove_x_factor(eqn_1.resultant(eqn_3)))
+    print(remove_x_factor(eqn_2.resultant(eqn_3)))
     return None
+
+
+def _do_lll(polynomials: list[Poly]) -> list[Poly]:
+    # Create the integer matrix.
+    all_monomials = set()
+    for poly in polynomials:
+        for coeff in poly.all_coeffs():
+            all_monomials.add((coeff[1], coeff[2]))
+    sorted_monomials = list(all_monomials)
+    sorted_monomials.sort(
+        key=lambda x: (x[0]+x[1], x[0], x[1]))
+
+    L = IntegerMatrix(len(sorted_monomials), len(sorted_monomials))
+    for row_idx, poly in enumerate(polynomials):
+        for coeff in poly.all_coeffs():
+            col_idx = sorted_monomials.index((coeff[1], coeff[2]))
+            L[row_idx, col_idx] = coeff[0]
+
+    # Run LLL.
+    L = LLL.reduction(L)
+    # Back to poly.
+    result: list[Poly] = []
+    for row in L:
+        poly = Poly()
+        for col_idx, coeff in enumerate(row):
+            (x_pow, y_pow) = sorted_monomials[col_idx]
+            poly += Poly(coeff) * (x ** x_pow) * (y ** y_pow)
+        result.append(poly)
+    return result
 
 
 if __name__ == "__main__":
@@ -103,14 +109,13 @@ if __name__ == "__main__":
 
     print("[*] Boneh-Durfee Attack Demo")
     print("[*] Generating RSA key with small private exponent...\n")
-    
-    e, n, d, phi, p, q, elapsed = gen_small_key(nbits=128, attempts_per_p=200)
+
+    e, n, d, phi, p, q = gen_small_key(nbits=16, attempts_per_p=200)
     print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}")
-    print(f"Generated in {elapsed:.2f}s\n")
-    
+
     print("[*] Running Boneh-Durfee lattice attack (m=4, delta=0.18)...\n")
     res = boneh_durfee_attack(n, e, m=4, delta=0.18, timeout_sec=30)
-    
+
     if res:
         p_found, q_found, d_found = res
         print("\n[+] SUCCESS! Private key recovered.")
