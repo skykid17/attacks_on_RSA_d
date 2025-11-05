@@ -1,8 +1,9 @@
+from typing import Optional, Tuple, List
 import math
-from expression import Poly, x, y, remove_x_factor
-from typing import Optional, Tuple
-from fpylll import LLL, IntegerMatrix
-
+import time
+from key_generation import gcd
+from fpylll import IntegerMatrix, LLL
+from fpylll.gso import MatGSO
 
 def _is_perfect_square(n: int) -> bool:
     """Return True if n is a perfect square."""
@@ -10,7 +11,6 @@ def _is_perfect_square(n: int) -> bool:
         return False
     r = math.isqrt(n)
     return r * r == n
-
 
 def boneh_durfee_attack(
     n: int,
