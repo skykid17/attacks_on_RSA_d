@@ -1,9 +1,7 @@
-from typing import Optional, Tuple, List
 import math
-import time
-from key_generation import gcd
-from fpylll import IntegerMatrix, LLL
-from fpylll.gso import MatGSO
+from expression import Poly, x, y, remove_x_factor
+from typing import Optional, Tuple
+from fpylll import LLL, IntegerMatrix
 
 def _is_perfect_square(n: int) -> bool:
     """Return True if n is a perfect square."""
