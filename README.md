@@ -1,30 +1,37 @@
 # SC4010 Project - Attacks on RSA
 
-This project demonstrates Wiener's attack, as well as Boneh Durfee on RSA cryptosystems with small and relatively small private exponents. It includes scripts for generating both vulnerable and strong RSA key pairs, and for performing the attack to recover private keys when possible.
+This project demonstrates Wiener's attack and Boneh Durfee attack on RSA with small and relatively small private exponents. It includes scripts for generating both vulnerable and strong RSA key pairs, and for performing the attack to recover private keys when possible.
 
 ## Features
 - **Key Generation**: Generate RSA keys that are either vulnerable or resistant to Wiener's attack.
 - **Wiener's Attack Implementation**: Recover private keys from vulnerable RSA moduli using continued fractions.
-- **Boneh Durfee Attack Implementation**: Two polynomial time attacks on small secret exponent RSA. The attack works when d < N^0.292. The attack is based on lattice based Coppersmith's method to solve modular equations.
-
+- **Boneh Durfee Attack Implementation**: Two polynomial time attacks on small secret exponent RSA. The attack works when d < N^0.292. The attack is based on lattice based Coppersmith's method to find short vectors. It reconstructs integer polynomials from the reduced basis (reconstruct_polynomials) and then finds small roots using algebraic solvers: pairwise gcds (find_roots_gcd) and Groebner‑basis elimination / univariate root finding (find_roots_groebner). The quotient trick (pr.quotient(1 + xy - u) and later substituting u = 1 + xy) is a linearization used in bivariate constructions (Herrmann & May style) to improve bounds.
 - **Demonstration**: Example runs showing successful and failed attacks.
 
 ## Requirements
+Requirements
+* SageMath
+* PyCryptodome
+
 Install dependencies with:
 ```
-pip install -r requirements.txt
+conda config --add channels conda-forge
+conda create -n sage_env python=3.12 sage pycryptodome
+conda activate sage_env
 ```
 
 ## Usage
 Run the demonstration script:
 ```
-python wiener_attack.py
+sage -python main.py
 ```
 This will:
-- Generate a vulnerable RSA key and attempt Wiener's attack (should succeed)
-- Generate a strong RSA key and attempt Wiener's attack (should fail)
+- Generate RSA key with small sized private exponent d and attempt Wiener's attack and Boneh Durfee attack (both should succeed)
+- Generate RSA key with medium sized private exponent d and attempt Wiener's attack (should fail) and Boneh Durfee attack (should succeed)
+- Generate RSA key with large sized private exponent d and attempt Wiener's attack and Boneh Durfee attack (both should fail)
 
 ## References
 - M. Wiener, "Cryptanalysis of Short RSA Secret Exponents," IEEE Transactions on Information Theory, 1990.
+- Boneh D., Durfee G., "Cryptanalysis of RSA with Private Key d Less than N^0.292"
 
 ---

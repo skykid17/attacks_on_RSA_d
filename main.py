@@ -43,7 +43,7 @@ def run_case(
     t0 = time.perf_counter()
     # exit after 86400 seconds (24 hours)
     try:
-        bd_res = boneh_durfee_attack(n, e, m=4, delta=0.18, timeout_sec=60)
+        bd_res = boneh_durfee_attack(n, e, n.bit_length()//2, m=3, delta=0.26)
     except TimeoutError:
         print("Boneh-Durfee: failed (timeout)")
         bd_ok = False
@@ -60,7 +60,7 @@ def run_case(
 
 def main():
     """Run comparative attack demonstrations on three key types."""
-    nbits = 2048
+    nbits = 1024
 
     # 1) Small d (Wiener vulnerable)
     print("\n=== Case [1/3]: Small d ===")
