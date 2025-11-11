@@ -1,4 +1,5 @@
 from expression import Poly, x, y, remove_x_factor
+from math import ceil
 from typing import Optional, Tuple
 from solve import first_root, quadratic
 from fpylll import LLL, IntegerMatrix
@@ -25,7 +26,7 @@ def boneh_durfee_attack(
     # Some default values. Y should be in the range p+q and X should be in the
     # range e^delta.
     if X_bound is None:
-        X_bound = 2 ** int(n.bit_length() * delta)
+        X_bound = 2 ** int(ceil(n.bit_length() * delta))
     if Y_bound is None:
         Y_bound = 2 ** (n.bit_length() // 2 + 1)
 
@@ -50,23 +51,30 @@ def boneh_durfee_attack(
     polynomials: list[Poly] = []
     # Boneh and Durfee found that the best m is 7 and t is 3.
     # That means our equations are 0 (mod e^7) and have a maximum power of y^3.
+    f_pow: list[Poly] = [Poly(1), f]
+    fp = f
+    for _ in range(2, m+1):
+        fp *= f
+        f_pow.append(fp)
     for k in range(m + 1):
         # x-shifts: x^i * f(x, y)^k * e^(m-k) = 0 (mod e^m)
         # For each k, we use g_ik for i = 0, ..., m-k.
         for i in range(m-k+1):
-            g_ik = (x**i) * (f**k) * (e_poly ** (m-k))
+            g_ik = (x**i) * f_pow[k] * (e_poly ** (m-k))
             polynomials.append(g_ik)
     for k in range(m + 1):
         # y-shifts: y^i * f(x, y)^k * e^(m-k) = 0 (mod e^m)
         # For each k, we use h_lk for l = 1, ..., t.
         for l_pow in range(1, t+1):
-            h_lk = (y**l_pow) * (f**k) * (e_poly ** (m-k))
+            h_lk = (y**l_pow) * f_pow[k] * (e_poly ** (m-k))
             polynomials.append(h_lk)
 
     if verbose:
         print("Equations before LLL:")
         for i in range(4):
             print(polynomials[i])
+        print()
+        print("Doing LLL...")
         print()
     polynomials = _do_lll(polynomials, X_bound, Y_bound)
     if verbose:
@@ -75,12 +83,9 @@ def boneh_durfee_attack(
             print(polynomials[i])
         print()
     root_x = None
-    eqn: Poly
-    for i in range(1, len(polynomials)):
+    for i in range(2, len(polynomials)):
         poly_i = polynomials[i]
-        if verbose:
-            print(f"Calculating {i=}")
-        for j in range(i+1, len(polynomials)):
+        for j in range(1, i):
             poly_j = polynomials[j]
             r_candidate = poly_i.resultant(poly_j)
             r_candidate = remove_x_factor(r_candidate)
@@ -92,8 +97,12 @@ def boneh_durfee_attack(
                 print("Chosen resultant:")
                 print(r_candidate)
             try:
-                eqn = poly_i
-                root_x = first_root(remove_x_factor(r_candidate))
+                eqn_1 = poly_i
+                eqn_2 = poly_j
+                root_x = first_root(
+                    remove_x_factor(r_candidate),
+                    x_guess=X_bound//2,
+                    verbose=verbose)
                 if verbose:
                     print(f"Found root for x: {root_x}")
                     print()
@@ -109,12 +118,20 @@ def boneh_durfee_attack(
         return None
 
     # Solve for the rest,
-    eqn_with_x = remove_x_factor(eqn.eval_poly(Poly(root_x), x))
+    eqn_with_x = remove_x_factor(eqn_1.eval_poly(Poly(root_x), x))
     if verbose:
-        print("Plugging in x into one of the equations that gave us x" +
-              "(x is actually y):")
-        print(eqn_with_x)
-    root_y = first_root(eqn_with_x)
+        print("Plugging in x into one of the equations that gave us x:")
+        print(eqn_with_x.eval_poly(y, x))
+    try:
+        root_y = first_root(eqn_with_x, x_guess=root_x)
+    except ArithmeticError as err:
+        eqn_with_x = remove_x_factor(eqn_2.eval_poly(Poly(root_x), x))
+        if verbose:
+            print("That failed to converge so we are plugging into the " +
+                  "second equation.")
+            print(f"Reason: {err}")
+            print(eqn_with_x.eval_poly(y, x))
+        root_y = first_root(eqn_with_x, x_guess=root_x)
     if verbose:
         print(f"Found root y: {Poly._format_num(root_y)}")
         print("Solving for actual primes next.")
