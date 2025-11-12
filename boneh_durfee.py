@@ -1,5 +1,5 @@
 from decimal import Decimal
-from expression import Poly, x, y, z, remove_x_factor
+from expression import Poly, x, y, z, remove_x_factor, resultant
 from typing import Optional, Tuple
 from solve import first_root, quadratic, find_root_dk
 from fpylll import LLL, IntegerMatrix
@@ -119,7 +119,7 @@ def boneh_durfee_attack(
         poly_i = polynomials[i].eval_poly(x, y, u)
         for j in range(i):
             poly_j = polynomials[j].eval_poly(x, y, u)
-            r_candidate = poly_i.resultant(poly_j)
+            r_candidate = resultant(poly_i, poly_j)
             r_candidate = remove_x_factor(r_candidate)
             if r_candidate.highest_x_power() == 0:
                 # Useless resultant. Skip.
@@ -190,8 +190,8 @@ def _do_lll(
     # Create the integer matrix.
     all_monomials = set()
     for poly in polynomials:
-        for coeff in poly.all_coeffs():
-            all_monomials.add((coeff[1], coeff[2], coeff[3]))
+        for (_, pow) in poly.all_coeffs():
+            all_monomials.add(pow)
     sorted_monomials = list(all_monomials)
     sorted_monomials.sort(key=lambda x: (
         # x-shifts first. Anything with y goes to the back.
@@ -205,14 +205,14 @@ def _do_lll(
     coeffs: list[tuple[int, list[int]]] = []
     for poly in polynomials:
         poly_coeff = [0] * len(sorted_monomials)
-        for coeff in poly.all_coeffs():
-            col_idx = sorted_monomials.index((coeff[1], coeff[2], coeff[3]))
+        for (coeff, pow) in poly.all_coeffs():
+            col_idx = sorted_monomials.index(pow)
             scaling_factor = (
-                (x_bound ** coeff[1]) *
-                (y_bound ** coeff[2]) *
-                (u_bound ** coeff[3])
+                (x_bound ** pow[0]) *
+                (y_bound ** pow[1]) *
+                (u_bound ** pow[2])
             )
-            poly_coeff[col_idx] = coeff[0] * scaling_factor
+            poly_coeff[col_idx] = coeff * scaling_factor
         last_nonzero = len(poly_coeff)-1
         while poly_coeff[last_nonzero] == 0:
             last_nonzero -= 1

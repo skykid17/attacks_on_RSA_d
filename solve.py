@@ -9,8 +9,8 @@ def linear(eqn: Poly) -> int:
     assert eqn.highest_x_power() == 1
     assert eqn.highest_y_power() == 0
     assert eqn.highest_z_power() == 0
-    c1 = eqn.get_coeff(1, 0, 0)
-    c0 = eqn.get_coeff(0, 0, 0)
+    c1 = eqn[1, 0, 0]
+    c0 = eqn[0, 0, 0]
     if c0 % c1 == 0:
         return -c0 // c1
     raise ArithmeticError("Linear equation has no integer root")
@@ -20,9 +20,9 @@ def quadratic(eqn: Poly) -> tuple[int, int]:
     assert eqn.highest_x_power() == 2
     assert eqn.highest_y_power() == 0
     assert eqn.highest_z_power() == 0
-    a = eqn.get_coeff(2, 0, 0)
-    b = eqn.get_coeff(1, 0, 0)
-    c = eqn.get_coeff(0, 0, 0)
+    a = eqn[2, 0, 0]
+    b = eqn[1, 0, 0]
+    c = eqn[0, 0, 0]
     determinant = b*b - 4*a*c
     if determinant < 0:
         raise ArithmeticError("Determinant is negative")
@@ -56,7 +56,7 @@ def first_root(eqn: Poly, verbose=False, x_guess: Optional[int] = None) -> int:
 
     highest_coeff = 0
     for x_pow in range(eqn.highest_x_power()+1):
-        highest_coeff = max(x_pow, eqn.get_coeff(x_pow, 0, 0))
+        highest_coeff = max(x_pow, eqn[x_pow, 0, 0])
     ctx = decimal.Context(prec=(highest_coeff.bit_length()*3 + 20))
 
     derivative = eqn.derivative_x()
@@ -64,8 +64,8 @@ def first_root(eqn: Poly, verbose=False, x_guess: Optional[int] = None) -> int:
     der_der = derivative.derivative_x()
     # x^(n-1)/x^n is sum of all roots and there are n roots so we use this as
     # our approximation.
-    x = (eqn.get_coeff(eqn.highest_x_power() - 1, 0, 0) //
-         eqn.get_coeff(eqn.highest_x_power(), 0, 0) //
+    x = (eqn[eqn.highest_x_power() - 1, 0, 0] //
+         eqn[eqn.highest_x_power(), 0, 0] //
          eqn.highest_x_power())
     x = x if x > 0 else -x
     if x_guess is not None:
@@ -110,9 +110,9 @@ def _simplify(eqn: Poly) -> Poly:
 def primitive(eqn: Poly) -> Poly:
     # Simplify polynomial by removing common factors.
     common = 0
-    for (coeff, _, _, _) in eqn.all_coeffs():
+    for (coeff, _) in eqn.all_coeffs():
         common = gcd(coeff, common)
-    if eqn.get_coeff(eqn.highest_x_power(), 0, 0) < 0:
+    if eqn[eqn.highest_x_power(), 0, 0] < 0:
         # Also flip sign if we are x only.
         common = -common
     return eqn/Poly(common)
@@ -128,7 +128,8 @@ def poly_eval(coeffs: list[complex], x: complex) -> complex:
 def durand_kerner(
         coeffs: Sequence[complex],
         tol: float = 1e-9,
-        max_iter: int = 1000) -> list[complex]:
+        max_iter: int = 1000,
+        verbose: bool = False) -> list[complex]:
     # Convert all coefficients to complex numbers
     c = [complex(c) for c in coeffs]
 
@@ -148,46 +149,44 @@ def durand_kerner(
         # Add a small offset to the angle to avoid symmetries
         v.append(R * cmath.exp(complex(0, angle + 0.4)))
 
-    for iteration in range(max_iter):
+    if verbose:
+        print(f"Initial guesses: {v}")
+
+    prev_change = None
+    diverge_count = 0
+    while True:
         max_change = 0.0
         new_v = list(v)
 
         for i in range(n):
             # Calculate the update step for root v[i]
-
-            # P(v_i)
             p_vi = poly_eval(c, v[i])
-
             # Denominator: product(v[i] - v[j] for j != i)
             denominator = complex(1, 0)
             for j in range(n):
                 if i == j:
                     continue
                 denominator *= (v[i] - v[j])
-
             if abs(denominator) < 1e-20:
                 # This happens with multiple roots or bad guesses.
                 # Avoid division by zero and skip update.
                 update = complex(0, 0)
             else:
                 update = p_vi / denominator
-
             # Apply the update
             new_v[i] = v[i] - update
-
-            # Keep track of the largest change in this iteration
             max_change = max(max_change, abs(update))
-
         v = new_v
-
         # Check for convergence
         if max_change < tol:
-            # All roots have stabilized
             return v
-
-    # If exit the loop, the method did not converge
-    print("Warning: Durand-Kerner failed to converge.")
-    return v
+        # Check for divergence.
+        if prev_change is not None and abs(max_change / prev_change) > 1.0:
+            diverge_count += 1
+            if diverge_count > 1_000:
+                print("Roots diverging. Returning known roots.")
+                return v
+        prev_change = max_change
 
 
 def find_root_dk(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
@@ -195,7 +194,7 @@ def find_root_dk(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int
     eqn = _simplify(eqn)
     coeffs = eqn.get_x_coefficients_desc()
 
-    if not coeffs or (len(coeffs) == 1 and coeffs[0] == 0):
+    if not coeffs or coeffs[0] == 0:
         raise ArithmeticError("Polynomial is zero.")
 
     if verbose:
@@ -203,9 +202,12 @@ def find_root_dk(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int
 
     # Call durand_kerner
     # This is the line that will likely raise an OverflowError
-    potential_roots = durand_kerner(coeffs, tol=1e-9)
+    potential_roots = durand_kerner(coeffs, tol=1e-9, verbose=verbose)
 
-    # Filter for positive integer roots
+    if verbose:
+        print(f"Got {potential_roots}")
+
+    # Filter for positive integer roots.
     int_roots = []
     for r in potential_roots:
         # Check if imaginary part is tiny
