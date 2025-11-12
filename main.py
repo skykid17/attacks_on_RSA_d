@@ -62,7 +62,7 @@ def run_case(
 
 def main():
     """Run comparative attack demonstrations on three key types."""
-    nbits = 2048
+    nbits = 1024
 
     # 1) Small d (Wiener vulnerable)
     print("\n=== Case [1/3]: Small d ===")

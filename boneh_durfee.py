@@ -192,6 +192,25 @@ def _do_lll(polynomials: list[Poly], x_bound: int, y_bound: int) -> list[Poly]:
         result.append(poly)
     return result
 
+    x, y = ZZ["x", "y"].gens()
+    f = x * (A + y) + pow(2, -p_lsb_bit_length, e)
+    X = int(RR(e) ** delta)
+    Y = int(2 ** (factor_bit_length - p_lsb_bit_length + 1))
+    t = int((1 - 2 * delta) * m) if t is None else t
+    logging.info(f"Trying {m = }, {t = }...")
+    for x0, y0 in modular_bivariate(f, e, m, t, X, Y):
+        z = int(f(x0, y0))
+        if z % e == 0:
+            k = pow(x0, -1, e)
+            s = (N + 1 + k) % e
+            phi = N - s + 1
+            factors = factorize(N, phi)
+            if factors:
+                p, q = factors
+                d = int(pow(e, -1, phi))
+                return p, q, d
+
+    return None
 
 if __name__ == "__main__":
     # Demo: generate a key with small d and attempt Boneh-Durfee recovery
