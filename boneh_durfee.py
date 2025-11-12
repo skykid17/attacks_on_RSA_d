@@ -43,9 +43,11 @@ def boneh_durfee_attack(
     e_poly = Poly(e)
 
     if verbose:
-        print(f"Function we are trying to solve is (mod e={
-              Poly._format_num(e)}):")
-        print(f)
+        # Use a simple formatted string to avoid multi-line f-string parsing
+        # differences between Python interpreters.
+        print("Function we are trying to solve is (mod e={0}):".format(
+            Poly._format_num(e)))
+        print()
         print()
 
     polynomials: list[Poly] = []
@@ -140,8 +142,8 @@ def boneh_durfee_attack(
     # Construct z^2 - 2(p+q)z + pq and our roots are p and q!
     p, q = quadratic(x**2 - x * Poly(root_y) + Poly(n))
     if verbose:
-        print(f"Primes recovered: p={
-              Poly._format_num(p)} q={Poly._format_num(q)}")
+        print("Primes recovered: p={0} q={1}".format(
+            Poly._format_num(p), Poly._format_num(q)))
     # Now we can recover d.
     phi = (p-1)*(q-1)
     d = pow(e, -1, phi)
@@ -191,26 +193,6 @@ def _do_lll(polynomials: list[Poly], x_bound: int, y_bound: int) -> list[Poly]:
             poly += Poly(coeff // scaling_factor) * (x ** x_pow) * (y ** y_pow)
         result.append(poly)
     return result
-
-    x, y = ZZ["x", "y"].gens()
-    f = x * (A + y) + pow(2, -p_lsb_bit_length, e)
-    X = int(RR(e) ** delta)
-    Y = int(2 ** (factor_bit_length - p_lsb_bit_length + 1))
-    t = int((1 - 2 * delta) * m) if t is None else t
-    logging.info(f"Trying {m = }, {t = }...")
-    for x0, y0 in modular_bivariate(f, e, m, t, X, Y):
-        z = int(f(x0, y0))
-        if z % e == 0:
-            k = pow(x0, -1, e)
-            s = (N + 1 + k) % e
-            phi = N - s + 1
-            factors = factorize(N, phi)
-            if factors:
-                p, q = factors
-                d = int(pow(e, -1, phi))
-                return p, q, d
-
-    return None
 
 if __name__ == "__main__":
     # Demo: generate a key with small d and attempt Boneh-Durfee recovery
