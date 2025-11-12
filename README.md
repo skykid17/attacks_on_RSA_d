@@ -10,21 +10,33 @@ This project demonstrates Wiener's attack and Boneh Durfee attack on RSA with sm
 
 ## Requirements
 Requirements
-* SageMath
 * PyCryptodome
+* fpylll (A)
+* SageMath (B)
 
+## Usage A
+Install dependencies with:
+```
+conda create -n venv python=3.12 pycryptodome fpylll
+conda activate venv
+```
+Run the demonstration script:
+```
+python main.py
+```
+
+## Usage B
 Install dependencies with:
 ```
 conda config --add channels conda-forge
 conda create -n sage_env python=3.12 sage pycryptodome
 conda activate sage_env
 ```
-
-## Usage
 Run the demonstration script:
 ```
 sage -python main.py
 ```
+
 This will:
 - Generate RSA key with small sized private exponent d and attempt Wiener's attack and Boneh Durfee attack (both should succeed)
 - Generate RSA key with medium sized private exponent d and attempt Wiener's attack (should fail) and Boneh Durfee attack (should succeed)
