@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections import defaultdict
+from math import gcd
 import sys
 from typing import overload
 
@@ -199,8 +200,8 @@ class Poly:
                     f"cannot divide {self} exactly by {divisor}: " +
                     f"remainder {numerator}")
             num_y = numerator._univariate(y_pow)
-            divided, rem = num_y._div_x(highest_y)
-            if not rem.is_zero():
+            k, divided, rem = num_y._div_x(highest_y)
+            if k > 1 or not rem.is_zero():
                 raise ArithmeticError(
                     f"cannot divide {self} exactly by {divisor}: " +
                     f"remainder {numerator}")
@@ -213,15 +214,30 @@ class Poly:
         assert self.highest_y_power() == 0
         assert other.highest_y_power() == 0
         a, b = self, other
+        total_k = 1
         while not a.is_zero():
-            _, rem = b._div_x(a)
-            if rem.highest_x_power() >= a.highest_x_power():
-                # They do not share an integer gcd.
-                return Poly(1)
+            # b._div_x(a) returns the result of divmod(kb, a).
+            # This means that if k > 1, we are actually calculating
+            # gcd(ka, b) where k is not a factor of a.
+            # If gcd(ka, b)=kx, gcd(a, b) is actually x. As such, we store
+            # k to potentially divide it later.
+            k, _, rem = b._div_x(a)
+            total_k *= k
             a, b = rem, a
-        return b
+        if total_k == 1:
+            return b
+        # Find gcd(k, result) so we can divide it.
+        for coeff in b.all_coeffs():
+            total_k = gcd(total_k, coeff[0])
+        return b / Poly(total_k)
 
-    def _div_x(self, divisor: Poly) -> tuple[Poly, Poly]:
+    def _div_x(self, divisor: Poly) -> tuple[int, Poly, Poly]:
+        """
+        _div_x divides two univariate X polynomials. If required, it will
+        multiply the numerator by a constant, this is returned as an integer.
+        The second and third values are the result and remainder of the
+        division.
+        """
         assert self.highest_y_power() == 0
         assert self.highest_z_power() == 0
         assert divisor.highest_y_power() == 0
@@ -229,21 +245,26 @@ class Poly:
         numerator = self
         result = Poly()
         lead_den = divisor.get_coeff(divisor.highest_x_power(), 0, 0)
+        dividend_mul = 1
         assert lead_den != 0
         while not numerator.is_zero():
             num_x_pow = numerator.highest_x_power()
             div_x_pow = divisor.highest_x_power()
             if num_x_pow < div_x_pow:
                 # Not fully divisible, return.
-                return result, numerator
+                return dividend_mul, result, numerator
             lead_num = numerator.get_coeff(numerator.highest_x_power(), 0, 0)
-            if abs(lead_num) < abs(lead_den):
-                # Not fully divisible, return.
-                return result, numerator
+            if abs(lead_num) % abs(lead_den) != 0:
+                # Not fully divisible. We multiply by a factor to continue.
+                mul_factor = lead_den // gcd(lead_num, lead_den)
+                numerator *= Poly(mul_factor)
+                result *= Poly(mul_factor)
+                dividend_mul *= mul_factor
+                continue
             factor = Poly(lead_num // lead_den) * (x ** (num_x_pow-div_x_pow))
             numerator -= factor * divisor
             result += factor
-        return result, numerator
+        return dividend_mul, result, numerator
 
     def __str__(self) -> str:
         monomials = [
