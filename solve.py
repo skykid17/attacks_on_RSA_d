@@ -2,7 +2,7 @@ import decimal
 from expression import Poly
 from math import gcd, isqrt
 from typing import Optional
-
+import cmath
 
 def linear(eqn: Poly) -> int:
     assert eqn.highest_x_power() == 1
@@ -108,3 +108,118 @@ def _simplify(eqn: Poly) -> Poly:
     if gcd_with_der.highest_x_power() > 0:
         return _simplify(new_eqn / gcd_with_der)
     return new_eqn
+
+def poly_eval(coeffs: list[complex], x: complex) -> complex:
+    result = complex(0, 0)
+    for c in coeffs:
+        result = result * x + c
+    return result
+
+def durand_kerner(coeffs: list, tol: float = 1e-9, max_iter: int = 1000) -> list[complex]:
+    # Convert all coefficients to complex numbers
+    c = [complex(c) for c in coeffs]
+    
+    # Degree of the polynomial
+    n = len(c) - 1
+    if n <= 0:
+        return []
+
+    # Generate initial root guesses (Aberth-Ehrlich method)
+    # Spread the guesses evenly on a circle in the complex plane.
+    # The circle's radius is based on the leading coefficients.
+    # This is a standard, robust starting point.
+    R = (abs(c[-1]) / abs(c[0]))**(1/n)
+    v = []
+    for k in range(n):
+        angle = 2 * cmath.pi * k / n
+        # Add a small offset to the angle to avoid symmetries
+        v.append(R * cmath.exp(complex(0, angle + 0.4))) 
+
+    for iteration in range(max_iter):
+        max_change = 0.0
+        new_v = list(v)
+
+        for i in range(n):
+            # Calculate the update step for root v[i]
+            
+            # P(v_i)
+            p_vi = poly_eval(c, v[i])
+            
+            # Denominator: product(v[i] - v[j] for j != i)
+            denominator = complex(1, 0)
+            for j in range(n):
+                if i == j:
+                    continue
+                denominator *= (v[i] - v[j])
+            
+            if abs(denominator) < 1e-20:
+                # This happens with multiple roots or bad guesses.
+                # Avoid division by zero and skip update.
+                update = complex(0, 0)
+            else:
+                update = p_vi / denominator
+            
+            # Apply the update
+            new_v[i] = v[i] - update
+            
+            # Keep track of the largest change in this iteration
+            max_change = max(max_change, abs(update))
+
+        v = new_v
+        
+        # Check for convergence
+        if max_change < tol:
+            # All roots have stabilized
+            return v
+
+    # If exit the loop, the method did not converge
+    print("Warning: Durand-Kerner failed to converge.")
+    return v
+
+def find_root_dk(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
+    assert eqn.highest_y_power() == 0
+
+    # Get coefficients for durand_kerner
+    # This requires the helper function we'll add to expression.py
+    try:
+        coeffs = eqn.get_x_coefficients_desc()
+    except AttributeError:
+        raise Exception("You must add 'get_x_coefficients_desc' to the Poly class in expression.py")
+
+    if not coeffs or (len(coeffs) == 1 and coeffs[0] == 0):
+        raise ArithmeticError("Polynomial is zero.")
+
+    if verbose:
+        print(f"Finding roots for degree {len(coeffs)-1} polynomial...")
+        
+    # Call durand_kerner
+    # This is the line that will likely raise an OverflowError
+    potential_roots = durand_kerner(coeffs, tol=1e-9)
+
+    # Filter for positive integer roots
+    int_roots = []
+    for r in potential_roots:
+        # Check if imaginary part is tiny
+        if abs(r.imag) < 1e-9:
+            r_real = r.real
+            # Check if it's very close to an integer
+            if abs(r_real - round(r_real)) < 1e-9:
+                root_val = int(round(r_real))
+                if root_val > 0:
+                    int_roots.append(root_val)
+    
+    int_roots = sorted(list(set(int_roots))) # Remove duplicates
+    
+    if verbose:
+        print(f"Found {len(int_roots)} potential positive integer roots: {int_roots}")
+
+    if not int_roots:
+        raise ArithmeticError("Durand-Kerner found no positive integer roots.")
+
+    # Return the "best" root.
+    # pick the one closest to x_guess, or just the smallest.
+    if x_guess is not None:
+        best_root = min(int_roots, key=lambda r: abs(r - x_guess))
+        return best_root
+    
+    return int_roots[0] # Return the smallest positive integer root

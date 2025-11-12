@@ -1,7 +1,7 @@
 from expression import Poly, x, y, remove_x_factor
 from math import ceil
 from typing import Optional, Tuple
-from solve import first_root, quadratic
+from solve import first_root, quadratic, find_root_dk
 from fpylll import LLL, IntegerMatrix
 
 
@@ -101,7 +101,7 @@ def boneh_durfee_attack(
             try:
                 eqn_1 = poly_i
                 eqn_2 = poly_j
-                root_x = first_root(
+                root_x = find_root_dk(
                     remove_x_factor(r_candidate),
                     x_guess=X_bound//2,
                     verbose=verbose)
@@ -196,12 +196,12 @@ def _do_lll(polynomials: list[Poly], x_bound: int, y_bound: int) -> list[Poly]:
 
 if __name__ == "__main__":
     # Demo: generate a key with small d and attempt Boneh-Durfee recovery
-    from key_generation import gen_small_key
+    from key_generation import *
 
     print("[*] Boneh-Durfee Attack Demo")
     print("[*] Generating RSA key with small private exponent...\n")
 
-    e, n, d, phi, p, q = gen_small_key(nbits=128, attempts_per_p=200)
+    e, n, d, phi, p, q = gen_mid_key(nbits=1024, attempts_per_p=200)
     print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}")
 
     print("[*] Running Boneh-Durfee lattice attack (m=4, delta=0.25)...\n")

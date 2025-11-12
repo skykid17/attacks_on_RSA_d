@@ -2,6 +2,7 @@ from __future__ import annotations
 from collections import defaultdict
 import sys
 from typing import overload
+from fractions import Fraction
 
 
 class Poly:
@@ -257,7 +258,54 @@ class Poly:
         for x_pow in range(self.highest_x_power()+1):
             result += Poly(self.get_coeff(x_pow, y_pow), x_pow, 0)
         return result
+    
+    # --- Add this method INSIDE the Poly class in expression.py ---
 
+    def get_x_coefficients_desc(self) -> list[int]:
+        """
+        Gets coefficients for a univariate-in-x polynomial in descending order
+        [c_n, c_{n-1}, ..., c_0]
+        """
+        assert self.highest_y_power() == 0, "Not a univariate-in-x polynomial"
+        
+        high_x = self.highest_x_power()
+        # Create a list of zeros [c_0, c_1, ..., c_n]
+        coeffs_asc = [0] * (high_x + 1)
+        
+        for x_pow, y_map in self.coeff.items():
+            if 0 in y_map: # Check if y_pow=0 exists
+                coeffs_asc[x_pow] = y_map[0]
+        
+        # Reverse to get [c_n, c_{n-1}, ..., c_0]
+        return list(reversed(coeffs_asc))
+    def has_y(self) -> bool:
+        """Checks if the polynomial has any y-terms."""
+        return self.highest_y_power() > 0
+
+    def get_x_coefficients_asc(self) -> list[int]:
+        """
+        Gets coefficients for a univariate-in-x polynomial in ascending order
+        [c0, c1, c2, ..., cn]
+        """
+        assert self.highest_y_power() == 0, "Not a univariate-in-x polynomial"
+        
+        high_x = self.highest_x_power()
+        # Create a list of zeros [c0, c1, ..., cn]
+        coeffs_asc = [0] * (high_x + 1)
+        
+        for x_pow, y_map in self.coeff.items():
+            if 0 in y_map: # Check if y_pow=0 exists
+                coeffs_asc[x_pow] = y_map[0]
+        
+        return coeffs_asc
+
+    def degree(self) -> int:
+        """Returns the highest total degree of any term (x_pow + y_pow)."""
+        max_deg = 0
+        for x_pow, y_map in self.coeff.items():
+            for y_pow in y_map.keys():
+                max_deg = max(max_deg, x_pow + y_pow)
+        return max_deg
 
 class PolyMat:
     def __init__(self, dim: int) -> None:
