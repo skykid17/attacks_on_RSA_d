@@ -1,5 +1,5 @@
-from expression import Poly, x, y, remove_x_factor
-from math import ceil
+from decimal import Decimal
+from expression import Poly, x, y, z, remove_x_factor
 from typing import Optional, Tuple
 from solve import first_root, quadratic, find_root_dk
 from fpylll import LLL, IntegerMatrix
@@ -15,32 +15,40 @@ def boneh_durfee_attack(
     delta: float = 0.18,
     timeout_sec: float = 60,
     verbose=False,
+    X_assert: Optional[int] = None,
+    Y_assert: Optional[int] = None,
 ) -> Optional[Tuple[int, int, int]]:
     if verbose:
         print(f"Solving n={Poly._format_num(n)} e={Poly._format_num(e)}")
-    if n % 2 == 0:
-        # n must be even, as such, we can already factorize it!
-        phi = n // 2 - 1
-        return n // 2, 2, pow(e, -1, phi)
-
+    assert n % 2 != 0
     # Some default values. Y should be in the range p+q and X should be in the
     # range e^delta.
     if X_bound is None:
-        X_bound = 2 ** int(ceil(n.bit_length() * delta))
+        X_bound = int(Decimal(n) ** Decimal(delta))
+        print("X_bound:", X_bound.bit_length())
     if Y_bound is None:
-        Y_bound = 2 ** (n.bit_length() // 2 + 1)
+        # Y_bound = 4 * int(Decimal(n) ** Decimal(0.5))
+        Y_bound = 4 * int(Decimal(n) ** Decimal(0.5))
+        print("Y_bound:", Y_bound.bit_length())
+    U_bound = X_bound * Y_bound + 1
+    print("U_bound:", U_bound.bit_length())
 
     # We are trying to solve:
-    # f(x, y) = x(A-y)+1 = 0 (mod e).
-    # A = N+1, y = p+q
+    # f(x, y) = x(A+y)+1 = 0 (mod e).
+    #         = Ax + u
+    # A = N+1, y = -p-q, u = xy+1
     #
     # This is derived from:
     # ed = k phi(n) + 1
     # ed = k(N-p-q+1) + 1
     # k(N-p-q+1) + 1 = 0 (mod e).
     A = n + 1
-    f = x * (Poly(A) - y) + Poly(1)
+    u = x * y + Poly(1)
+    f = Poly(A) * x + z
     e_poly = Poly(e)
+    if X_assert is not None and Y_assert is not None:
+        U_assert = X_assert*Y_assert+1
+        assert f.eval(X_assert, Y_assert, U_assert) % e == 0
 
     if verbose:
         # Use a simple formatted string to avoid multi-line f-string parsing
@@ -59,17 +67,25 @@ def boneh_durfee_attack(
         fp *= f
         f_pow.append(fp)
     for k in range(m + 1):
-        # x-shifts: x^i * f(x, y)^k * e^(m-k) = 0 (mod e^m)
+        # x-shifts: x^i * f(x, y, z)^k * e^(m-k) = 0 (mod e^m)
         # For each k, we use g_ik for i = 0, ..., m-k.
         for i in range(m-k+1):
             g_ik = (x**i) * f_pow[k] * (e_poly ** (m-k))
             polynomials.append(g_ik)
+            if X_assert is not None and Y_assert is not None:
+                assert g_ik.eval(X_assert, Y_assert, U_assert) % (e ** m) == 0
     for k in range(m + 1):
-        # y-shifts: y^i * f(x, y)^k * e^(m-k) = 0 (mod e^m)
+        # y-shifts: y^i * f(x, y, z)^k * e^(m-k) = 0 (mod e^m)
         # For each k, we use h_lk for l = 1, ..., t.
         for l_pow in range(1, t+1):
             h_lk = (y**l_pow) * f_pow[k] * (e_poly ** (m-k))
             polynomials.append(h_lk)
+            if X_assert is not None and Y_assert is not None:
+                assert h_lk.eval(X_assert, Y_assert, U_assert) % (e ** m) == 0
+    polynomials = [poly.sub_xy(z - Poly(1)) for poly in polynomials]
+    if X_assert is not None and Y_assert is not None:
+        for poly in polynomials:
+            assert poly.eval(X_assert, Y_assert, U_assert) % (e ** m) == 0
 
     if verbose:
         print("Equations before LLL:")
@@ -78,17 +94,31 @@ def boneh_durfee_attack(
         print()
         print("Doing LLL...")
         print()
-    polynomials = _do_lll(polynomials, X_bound, Y_bound)
+    polynomials = _do_lll(polynomials, X_bound, Y_bound, U_bound, verbose)
     if verbose:
         print("Equations after LLL:")
         for i in range(4):
             print(polynomials[i])
         print()
+    if X_assert is not None and Y_assert is not None:
+        num_valid = sum([
+            1 if poly.eval(X_assert, Y_assert, U_assert) == 0
+            else 0
+            for poly in polynomials
+        ])
+        print(f"Number of valid polys: {num_valid}, they are ")
+        for i, poly in enumerate(polynomials):
+            if poly.eval(X_assert, Y_assert, U_assert) == 0:
+                print(i, end=" ")
+        print()
+        assert num_valid >= 2
     root_x = None
-    for i in range(2, len(polynomials)):
-        poly_i = polynomials[i]
-        for j in range(1, i):
-            poly_j = polynomials[j]
+    for i in range(1, len(polynomials)):
+        if verbose:
+            print(f"Trying {i=}")
+        poly_i = polynomials[i].eval_poly(x, y, u)
+        for j in range(i):
+            poly_j = polynomials[j].eval_poly(x, y, u)
             r_candidate = poly_i.resultant(poly_j)
             r_candidate = remove_x_factor(r_candidate)
             if r_candidate.highest_x_power() == 0:
@@ -105,6 +135,10 @@ def boneh_durfee_attack(
                     remove_x_factor(r_candidate),
                     x_guess=X_bound//2,
                     verbose=verbose)
+                if X_assert is not None and Y_assert is not None:
+                    if (eqn_1.eval(X_assert, Y_assert, 0) == 0 and
+                            eqn_2.eval(X_assert, Y_assert, 0) == 0):
+                        assert r_candidate.eval(X_assert, Y_assert, 0) == 0
                 if verbose:
                     print(f"Found root for x: {root_x}")
                     print()
@@ -120,27 +154,27 @@ def boneh_durfee_attack(
         return None
 
     # Solve for the rest,
-    eqn_with_x = remove_x_factor(eqn_1.eval_poly(Poly(root_x), x))
+    eqn_with_x = remove_x_factor(eqn_1.eval_poly(Poly(root_x), x, x))
     if verbose:
         print("Plugging in x into one of the equations that gave us x:")
-        print(eqn_with_x.eval_poly(y, x))
+        print(eqn_with_x.eval_poly(y, x, x))
     try:
         root_y = first_root(eqn_with_x, x_guess=root_x)
     except ArithmeticError as err:
-        eqn_with_x = remove_x_factor(eqn_2.eval_poly(Poly(root_x), x))
+        eqn_with_x = remove_x_factor(eqn_2.eval_poly(Poly(root_x), x, x))
         if verbose:
             print("That failed to converge so we are plugging into the " +
                   "second equation.")
             print(f"Reason: {err}")
-            print(eqn_with_x.eval_poly(y, x))
+            print(eqn_with_x.eval_poly(y, x, x))
         root_y = first_root(eqn_with_x, x_guess=root_x)
     if verbose:
         print(f"Found root y: {Poly._format_num(root_y)}")
         print("Solving for actual primes next.")
     # Reminder:
-    # y = p+q
-    # Construct z^2 - 2(p+q)z + pq and our roots are p and q!
-    p, q = quadratic(x**2 - x * Poly(root_y) + Poly(n))
+    # y = -p-q
+    # Construct z^2 - (p+q)z + pq and our roots are p and q!
+    p, q = quadratic(x**2 + x * Poly(root_y) + Poly(n))
     if verbose:
         print("Primes recovered: p={0} q={1}".format(
             Poly._format_num(p), Poly._format_num(q)))
@@ -150,22 +184,34 @@ def boneh_durfee_attack(
     return p, q, d
 
 
-def _do_lll(polynomials: list[Poly], x_bound: int, y_bound: int) -> list[Poly]:
+def _do_lll(
+        polynomials: list[Poly],
+        x_bound: int, y_bound: int, u_bound: int, verbose: bool) -> list[Poly]:
     # Create the integer matrix.
     all_monomials = set()
     for poly in polynomials:
         for coeff in poly.all_coeffs():
-            all_monomials.add((coeff[1], coeff[2]))
+            all_monomials.add((coeff[1], coeff[2], coeff[3]))
     sorted_monomials = list(all_monomials)
-    sorted_monomials.sort(
-        key=lambda x: (-1 if x[1] <= x[0] else 1, x[0], x[1]))
+    sorted_monomials.sort(key=lambda x: (
+        # x-shifts first. Anything with y goes to the back.
+        1 if x[1] > 0 else -1,
+        x[0]+x[2],  # Sum of x power and u power.
+        x[2], x[0],  # Smaller u power first (x before u. x^2 before ux before
+                     # u^2).
+        x[1],  # Finally, y power.
+    ))
 
     coeffs: list[tuple[int, list[int]]] = []
     for poly in polynomials:
         poly_coeff = [0] * len(sorted_monomials)
         for coeff in poly.all_coeffs():
-            col_idx = sorted_monomials.index((coeff[1], coeff[2]))
-            scaling_factor = (x_bound ** coeff[1]) * (y_bound ** coeff[2])
+            col_idx = sorted_monomials.index((coeff[1], coeff[2], coeff[3]))
+            scaling_factor = (
+                (x_bound ** coeff[1]) *
+                (y_bound ** coeff[2]) *
+                (u_bound ** coeff[3])
+            )
             poly_coeff[col_idx] = coeff[0] * scaling_factor
         last_nonzero = len(poly_coeff)-1
         while poly_coeff[last_nonzero] == 0:
@@ -184,19 +230,26 @@ def _do_lll(polynomials: list[Poly], x_bound: int, y_bound: int) -> list[Poly]:
     for row in L:
         poly = Poly()
         for col_idx, coeff in enumerate(row):
-            (x_pow, y_pow) = sorted_monomials[col_idx]
-            scaling_factor = (x_bound ** x_pow) * (y_bound ** y_pow)
+            (x_pow, y_pow, u_pow) = sorted_monomials[col_idx]
+            scaling_factor = (
+                (x_bound ** x_pow) *
+                (y_bound ** y_pow) *
+                (u_bound ** u_pow)
+            )
             if coeff % scaling_factor != 0:
                 raise ArithmeticError(
                     "coefficient after LLL is not a multiple of scaling" +
                     "factor")
-            poly += Poly(coeff // scaling_factor) * (x ** x_pow) * (y ** y_pow)
+            poly += Poly(coeff // scaling_factor) * (
+                (x ** x_pow) * (y ** y_pow) * (z ** u_pow)
+            )
         result.append(poly)
     return result
 
+
 if __name__ == "__main__":
     # Demo: generate a key with small d and attempt Boneh-Durfee recovery
-    from key_generation import *
+    from key_generation import gen_mid_key
 
     print("[*] Boneh-Durfee Attack Demo")
     print("[*] Generating RSA key with small private exponent...\n")
@@ -204,9 +257,13 @@ if __name__ == "__main__":
     e, n, d, phi, p, q = gen_mid_key(nbits=1024, attempts_per_p=200)
     print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}")
 
-    print("[*] Running Boneh-Durfee lattice attack (m=4, delta=0.25)...\n")
+    actual_x = (e*d - 1) // (p-1) // (q-1)
+    actual_y = -p-q
+
+    print("[*] Running Boneh-Durfee lattice attack (m=4, delta=0.26)...\n")
     res = boneh_durfee_attack(
-        n, e, m=3, t=2, delta=0.25, timeout_sec=30, verbose=True)
+        n, e, m=4, t=3, delta=0.25, timeout_sec=30, verbose=True,
+        X_assert=actual_x, Y_assert=actual_y)
 
     if res:
         p_found, q_found, d_found = res

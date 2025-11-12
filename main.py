@@ -18,14 +18,15 @@ from wiener_attack import wiener_attack
 
 
 def run_case(
-        e: int, n: int, d: int, m: int = 7, t: int = 3,
+        e: int, n: int, d: int, p: int, q: int, m: int = 7, t: int = 3,
 ) -> Tuple[bool, bool, Optional[Tuple[int, int, int]], Optional[Tuple[int, int, int]]]:
     """Run Wiener and Boneh-Durfee on given public key and return results.
 
     Returns a tuple: (wiener_success, bd_success, wiener_result, bd_result)
     where results are (p,q,d) or None.
     """
-    print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}\n")
+    print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}")
+    print(f"p bits: {p.bit_length()}, q bits: {q.bit_length()}\n")
 
     # Wiener
     t0 = time.perf_counter()
@@ -43,8 +44,12 @@ def run_case(
     t0 = time.perf_counter()
     # exit after 86400 seconds (24 hours)
     try:
+        expected_x = (e*d-1) // (p-1) // (q-1)
+        expected_y = -p-q
         bd_res = boneh_durfee_attack(
-            n, e, m=m, t=t, delta=0.29, timeout_sec=60, verbose=True)
+            n, e, m=m, t=t, delta=0.26, timeout_sec=60, verbose=True,
+            X_assert=expected_x, Y_assert=expected_y,
+        )
     except TimeoutError:
         print("Boneh-Durfee: failed (timeout)")
         bd_ok = False
@@ -67,12 +72,12 @@ def main():
     # 1) Small d (Wiener vulnerable)
     print("\n=== Case [1/3]: Small d ===")
     e_s, n_s, d_s, phi_s, p_s, q_s = gen_small_key(nbits=nbits)
-    w_s, bd_s, wres_s, bdres_s = run_case(e_s, n_s, d_s)
+    w_s, bd_s, wres_s, bdres_s = run_case(e_s, n_s, d_s, p_s, q_s)
 
     # 2) Medium d (Wiener should fail, Boneh-Durfee succeed)
     print("\n=== Case [2/3]: Medium d ===")
     e_m, n_m, d_m, phi_m, p_m, q_m = gen_mid_key(nbits=nbits)
-    w_m, bd_m, wres_m, bdres_m = run_case(e_m, n_m, d_m, m=20, t=9)
+    w_m, bd_m, wres_m, bdres_m = run_case(e_m, n_m, d_m, p_m, q_m, m=10, t=4)
 
     # 3) Large d (strong key, both fail)
     # print("\n=== Case [3/3]: Large d ===")

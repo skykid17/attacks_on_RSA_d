@@ -64,7 +64,7 @@ def gen_mid_key(nbits: int = 128, attempts_per_p: int = 300) -> Tuple[int, int, 
     """Generate RSA key with medium d (between Wiener bound and ~n^0.29)."""
     # Compute Wiener's maximum d for a candidate n
     min_d = math.isqrt(math.isqrt(2**nbits)) // 3
-    max_d = int(Decimal(2 ** (nbits - 1)) ** Decimal(0.28))
+    max_d = int(Decimal(2 ** (nbits - 1)) ** Decimal(0.26))
     return gen_key_with_d_range(
         nbits=nbits, min_d=min_d, max_d=max_d, attempts_per_p=attempts_per_p
     )
@@ -88,9 +88,9 @@ def gen_large_key(
 if __name__ == "__main__":
     print("Generating vulnerable key (classic Wiener's bound 81*d^4 < n)...")
     t0 = time.perf_counter()
-    e, n, d, phi, p, q, elapsed = gen_small_key(nbits=1024, attempts_per_p=400)
+    e, n, d, phi, p, q = gen_small_key(nbits=1024, attempts_per_p=400)
     t_total = time.perf_counter() - t0
-    print(f"Done in {t_total:.2f}s (gen elapsed {elapsed:.2f}s).")
+    print(f"Done in {t_total:.2f}s.")
     print(f"e: {e}\nd: {d}\nn bits: {
           n.bit_length()}\nd bits: {d.bit_length()}")
     print("Check Wiener's bound: 81*d^4 < n ->", 81 * pow(d, 4) < n)
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     t0 = time.perf_counter()
     e, n, d, phi, p, q = gen_large_key(nbits=1024, e_fixed=65537)
     t_total = time.perf_counter() - t0
-    print(f"Done in {t_total:.2f}s (gen elapsed {elapsed:.2f}s).")
+    print(f"Done in {t_total:.2f}s.")
     print(f"e: {e}\nd: {d}\nn bits: {
           n.bit_length()}\nd bits: {d.bit_length()}")
     print("Check Wiener's bound: 81*d^4 < n ->", 81 * pow(d, 4) < n)
