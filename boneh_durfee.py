@@ -1,7 +1,7 @@
 from decimal import Decimal
 from expression import Poly, x, y, z, remove_x_factor, resultant
 from typing import Optional, Tuple
-from solve import first_root, quadratic, find_root_dk
+from solve import first_root, quadratic
 from fpylll import LLL, IntegerMatrix
 
 
@@ -25,13 +25,16 @@ def boneh_durfee_attack(
     # range e^delta.
     if X_bound is None:
         X_bound = int(Decimal(n) ** Decimal(delta))
-        print("X_bound:", X_bound.bit_length())
+        if verbose:
+            print("X_bound:", X_bound.bit_length())
     if Y_bound is None:
         # Y_bound = 4 * int(Decimal(n) ** Decimal(0.5))
         Y_bound = 4 * int(Decimal(n) ** Decimal(0.5))
-        print("Y_bound:", Y_bound.bit_length())
+        if verbose:
+            print("Y_bound:", Y_bound.bit_length())
     U_bound = X_bound * Y_bound + 1
-    print("U_bound:", U_bound.bit_length())
+    if verbose:
+        print("U_bound:", U_bound.bit_length())
 
     # We are trying to solve:
     # f(x, y) = x(A+y)+1 = 0 (mod e).
@@ -43,9 +46,8 @@ def boneh_durfee_attack(
     # ed = k(N-p-q+1) + 1
     # k(N-p-q+1) + 1 = 0 (mod e).
     A = n + 1
-    u = x * y + Poly(1)
-    f = Poly(A) * x + z
-    e_poly = Poly(e)
+    u = x * y + 1
+    f = A * x + z
     if X_assert is not None and Y_assert is not None:
         U_assert = X_assert*Y_assert+1
         assert f.eval(X_assert, Y_assert, U_assert) % e == 0
@@ -55,13 +57,13 @@ def boneh_durfee_attack(
         # differences between Python interpreters.
         print("Function we are trying to solve is (mod e={0}):".format(
             Poly._format_num(e)))
-        print()
+        print(f)
         print()
 
     polynomials: list[Poly] = []
     # Boneh and Durfee found that the best m is 7 and t is 3.
     # That means our equations are 0 (mod e^7) and have a maximum power of y^3.
-    f_pow: list[Poly] = [Poly(1), f]
+    f_pow: list[int | Poly] = [1, f]
     fp = f
     for _ in range(2, m+1):
         fp *= f
@@ -70,7 +72,7 @@ def boneh_durfee_attack(
         # x-shifts: x^i * f(x, y, z)^k * e^(m-k) = 0 (mod e^m)
         # For each k, we use g_ik for i = 0, ..., m-k.
         for i in range(m-k+1):
-            g_ik = (x**i) * f_pow[k] * (e_poly ** (m-k))
+            g_ik = (x**i) * f_pow[k] * (e ** (m-k))
             polynomials.append(g_ik)
             if X_assert is not None and Y_assert is not None:
                 assert g_ik.eval(X_assert, Y_assert, U_assert) % (e ** m) == 0
@@ -78,11 +80,11 @@ def boneh_durfee_attack(
         # y-shifts: y^i * f(x, y, z)^k * e^(m-k) = 0 (mod e^m)
         # For each k, we use h_lk for l = 1, ..., t.
         for l_pow in range(1, t+1):
-            h_lk = (y**l_pow) * f_pow[k] * (e_poly ** (m-k))
+            h_lk = (y**l_pow) * f_pow[k] * (e ** (m-k))
             polynomials.append(h_lk)
             if X_assert is not None and Y_assert is not None:
                 assert h_lk.eval(X_assert, Y_assert, U_assert) % (e ** m) == 0
-    polynomials = [poly.sub_xy(z - Poly(1)) for poly in polynomials]
+    polynomials = [poly.sub_xy(z - 1) for poly in polynomials]
     if X_assert is not None and Y_assert is not None:
         for poly in polynomials:
             assert poly.eval(X_assert, Y_assert, U_assert) % (e ** m) == 0
@@ -113,7 +115,7 @@ def boneh_durfee_attack(
         print()
         assert num_valid >= 2
     root_x = None
-    for i in range(1, len(polynomials)):
+    for i in range(1, 5):
         if verbose:
             print(f"Trying {i=}")
         poly_i = polynomials[i].eval_poly(x, y, u)
@@ -131,14 +133,15 @@ def boneh_durfee_attack(
             try:
                 eqn_1 = poly_i
                 eqn_2 = poly_j
-                root_x = find_root_dk(
-                    remove_x_factor(r_candidate),
-                    x_guess=X_bound//2,
-                    verbose=verbose)
                 if X_assert is not None and Y_assert is not None:
                     if (eqn_1.eval(X_assert, Y_assert, 0) == 0 and
                             eqn_2.eval(X_assert, Y_assert, 0) == 0):
                         assert r_candidate.eval(X_assert, Y_assert, 0) == 0
+                root_x = first_root(
+                    remove_x_factor(r_candidate),
+                    x_guess=X_bound//2)
+                if X_assert is not None:
+                    assert X_assert == root_x
                 if verbose:
                     print(f"Found root for x: {root_x}")
                     print()
@@ -154,27 +157,31 @@ def boneh_durfee_attack(
         return None
 
     # Solve for the rest,
-    eqn_with_x = remove_x_factor(eqn_1.eval_poly(Poly(root_x), x, x))
+    eqn_with_x = remove_x_factor(eqn_1.eval_poly(root_x, -x, x))
     if verbose:
         print("Plugging in x into one of the equations that gave us x:")
         print(eqn_with_x.eval_poly(y, x, x))
+    if Y_assert is not None:
+        assert eqn_with_x.eval(-Y_assert, 0, 0) == 0
     try:
-        root_y = first_root(eqn_with_x, x_guess=root_x)
+        root_y = first_root(eqn_with_x, x_guess=Y_bound)
     except ArithmeticError as err:
-        eqn_with_x = remove_x_factor(eqn_2.eval_poly(Poly(root_x), x, x))
+        eqn_with_x = remove_x_factor(eqn_2.eval_poly(root_x, -x, x))
         if verbose:
             print("That failed to converge so we are plugging into the " +
                   "second equation.")
             print(f"Reason: {err}")
             print(eqn_with_x.eval_poly(y, x, x))
-        root_y = first_root(eqn_with_x, x_guess=root_x)
+        if Y_assert is not None:
+            assert eqn_with_x.eval(-Y_assert, 0, 0) == 0
+        root_y = first_root(eqn_with_x, x_guess=Y_bound)
     if verbose:
         print(f"Found root y: {Poly._format_num(root_y)}")
         print("Solving for actual primes next.")
     # Reminder:
     # y = -p-q
     # Construct z^2 - (p+q)z + pq and our roots are p and q!
-    p, q = quadratic(x**2 + x * Poly(root_y) + Poly(n))
+    p, q = quadratic(x**2 - x * root_y + n)
     if verbose:
         print("Primes recovered: p={0} q={1}".format(
             Poly._format_num(p), Poly._format_num(q)))
@@ -230,7 +237,8 @@ def _do_lll(
     for row in L:
         poly = Poly()
         for col_idx, coeff in enumerate(row):
-            (x_pow, y_pow, u_pow) = sorted_monomials[col_idx]
+            pow = sorted_monomials[col_idx]
+            (x_pow, y_pow, u_pow) = pow
             scaling_factor = (
                 (x_bound ** x_pow) *
                 (y_bound ** y_pow) *
@@ -240,9 +248,7 @@ def _do_lll(
                 raise ArithmeticError(
                     "coefficient after LLL is not a multiple of scaling" +
                     "factor")
-            poly += Poly(coeff // scaling_factor) * (
-                (x ** x_pow) * (y ** y_pow) * (z ** u_pow)
-            )
+            poly[pow] += coeff // scaling_factor
         result.append(poly)
     return result
 

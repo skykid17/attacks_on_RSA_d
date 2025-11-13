@@ -1,5 +1,5 @@
-import decimal
-from expression import Poly
+from decimal import MAX_EMAX
+from expression import Complex, ComplexContext, Poly
 from math import gcd, isqrt
 from typing import Optional, Sequence
 import cmath
@@ -36,67 +36,6 @@ def quadratic(eqn: Poly) -> tuple[int, int]:
     return ((-b + d)//(2*a), (-b-d)//(2*a))
 
 
-def first_root(eqn: Poly, verbose=False, x_guess: Optional[int] = None) -> int:
-    assert eqn.highest_y_power() == 0
-    assert eqn.highest_z_power() == 0
-    assert eqn.highest_x_power() > 0
-
-    eqn = _simplify(eqn)
-    if verbose:
-        print(f"After simplification: {eqn}")
-
-    if eqn.highest_x_power() == 1:
-        return linear(eqn)
-    if eqn.highest_x_power() == 2:
-        x1, x2 = quadratic(eqn)
-        x1, x2 = min(x1, x2), max(x1, x2)
-        if x1 > 0:
-            return x1
-        return x2
-
-    highest_coeff = 0
-    for x_pow in range(eqn.highest_x_power()+1):
-        highest_coeff = max(x_pow, eqn[x_pow, 0, 0])
-    ctx = decimal.Context(prec=(highest_coeff.bit_length()*3 + 20))
-
-    derivative = eqn.derivative_x()
-    # Halley's method.
-    der_der = derivative.derivative_x()
-    # x^(n-1)/x^n is sum of all roots and there are n roots so we use this as
-    # our approximation.
-    x = (eqn[eqn.highest_x_power() - 1, 0, 0] //
-         eqn[eqn.highest_x_power(), 0, 0] //
-         eqn.highest_x_power())
-    x = x if x > 0 else -x
-    if x_guess is not None:
-        x = x_guess
-    nudge = 0
-    while nudge < 1_000:
-        f_x = eqn.eval(x, 0, 0)
-        if f_x == 0:
-            return x
-        der_x = ctx.create_decimal(derivative.eval(x, 0, 0))
-        der_der_x = ctx.create_decimal(der_der.eval(x, 0, 0))
-        denominator = der_x*der_x - der_x * der_der_x / 2
-        if denominator == 0:
-            # We stop if we're stuck nudging.
-            nudge += 1
-            x += 1
-            continue
-        update_amount = int(((f_x * der_x) / denominator).to_integral_value())
-        if update_amount == 0:
-            # We have hit the best we can do. We should be in the
-            # neighbourhood.
-            break
-        x = x-update_amount
-    for x_deviation in range(1_000):
-        if eqn.eval(x + x_deviation, 0, 0) == 0:
-            return x + x_deviation
-        if eqn.eval(x - x_deviation, 0, 0) == 0:
-            return x - x_deviation
-    raise ArithmeticError("Cannot find actual x.")
-
-
 def _simplify(eqn: Poly) -> Poly:
     eqn = primitive(eqn)
     # Remove square factors.
@@ -115,84 +54,69 @@ def primitive(eqn: Poly) -> Poly:
     if eqn[eqn.highest_x_power(), 0, 0] < 0:
         # Also flip sign if we are x only.
         common = -common
-    return eqn/Poly(common)
+    return eqn/common
 
 
-def poly_eval(coeffs: list[complex], x: complex) -> complex:
-    result = complex(0, 0)
-    for c in coeffs:
-        result = result * x + c
-    return result
-
-
-def durand_kerner(
-        coeffs: Sequence[complex],
-        tol: float = 1e-9,
-        max_iter: int = 1000,
-        verbose: bool = False) -> list[complex]:
+def aberth_ehrlich(
+        ctx: ComplexContext,
+        coeffs: Sequence[int],
+        der_coeffs: Sequence[int],
+        tol: float = 1e-9) -> list[Complex]:
     # Convert all coefficients to complex numbers
-    c = [complex(c) for c in coeffs]
+    c = [ctx.create(c)/ctx.create(coeffs[0]) for c in coeffs]
+    der_c = [ctx.create(c)/ctx.create(coeffs[0]) for c in der_coeffs]
+    one = ctx.create(1)
 
     # Degree of the polynomial
     n = len(c) - 1
     if n <= 0:
         return []
 
-    # Generate initial root guesses (Aberth-Ehrlich method)
-    # Spread the guesses evenly on a circle in the complex plane.
-    # The circle's radius is based on the leading coefficients.
-    # This is a standard, robust starting point.
-    R = (abs(c[-1]) / abs(c[0]))**(1/n)
-    v = []
-    for k in range(n):
-        angle = 2 * cmath.pi * k / n
-        # Add a small offset to the angle to avoid symmetries
-        v.append(R * cmath.exp(complex(0, angle + 0.4)))
+    # Generate initial root guesses. Spread the guesses out.
+    v = [ctx.create(0.4, 0.9) ** i for i in range(n)]
 
-    if verbose:
-        print(f"Initial guesses: {v}")
+    def poly_eval(coeffs: Sequence[Complex],
+                  x: Complex) -> Complex:
+        result = ctx.create(0)
+        for c in coeffs:
+            result = result * x + c
+        return result
 
     prev_change = None
     diverge_count = 0
     while True:
-        max_change = 0.0
-        new_v = list(v)
+        max_change = ctx.create_decimal(0)
 
         for i in range(n):
             # Calculate the update step for root v[i]
             p_vi = poly_eval(c, v[i])
-            # Denominator: product(v[i] - v[j] for j != i)
-            denominator = complex(1, 0)
+            p_der_vi = poly_eval(der_c, v[i])
+            denominator = ctx.create(0)
             for j in range(n):
                 if i == j:
                     continue
-                denominator *= (v[i] - v[j])
-            if abs(denominator) < 1e-20:
-                # This happens with multiple roots or bad guesses.
-                # Avoid division by zero and skip update.
-                update = complex(0, 0)
-            else:
-                update = p_vi / denominator
-            # Apply the update
-            new_v[i] = v[i] - update
+                denominator += one / (v[i] - v[j])
+            update = p_vi / (p_der_vi - p_vi * denominator)
+            v[i] -= update
             max_change = max(max_change, abs(update))
-        v = new_v
         # Check for convergence
         if max_change < tol:
             return v
         # Check for divergence.
-        if prev_change is not None and abs(max_change / prev_change) > 1.0:
+        if (prev_change is not None and
+                abs(max_change) / abs(prev_change) >= 1.0):
             diverge_count += 1
-            if diverge_count > 1_000:
-                print("Roots diverging. Returning known roots.")
-                return v
+            if diverge_count > 10_000:
+                print("Roots diverging. Giving up.")
+                return []
         prev_change = max_change
 
 
-def find_root_dk(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
+def first_root(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
     assert eqn.highest_y_power() == 0
     eqn = _simplify(eqn)
     coeffs = eqn.get_x_coefficients_desc()
+    der_coeffs = eqn.derivative_x().get_x_coefficients_desc()
 
     if not coeffs or coeffs[0] == 0:
         raise ArithmeticError("Polynomial is zero.")
@@ -200,38 +124,44 @@ def find_root_dk(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int
     if verbose:
         print(f"Finding roots for degree {len(coeffs)-1} polynomial...")
 
-    # Call durand_kerner
-    # This is the line that will likely raise an OverflowError
-    potential_roots = durand_kerner(coeffs, tol=1e-9, verbose=verbose)
+    root_scale = (len(str(coeffs[-1])) - len(str(coeffs[0]))) // len(coeffs)
+    ctx = ComplexContext(
+        prec=root_scale * 2 + 50,
+        Emax=MAX_EMAX,
+    )
+    with ctx:
+        potential_roots = aberth_ehrlich(ctx, coeffs, der_coeffs, tol=1e-9)
 
-    if verbose:
-        print(f"Got {potential_roots}")
+        if verbose:
+            print(f"Got {potential_roots}")
 
-    # Filter for positive integer roots.
-    int_roots = []
-    for r in potential_roots:
-        # Check if imaginary part is tiny
-        if abs(r.imag) < 1e-9:
-            r_real = r.real
-            # Check if it's very close to an integer
-            if abs(r_real - round(r_real)) < 1e-9:
-                root_val = int(round(r_real))
-                if root_val > 0:
-                    int_roots.append(root_val)
+        # Filter for positive integer roots.
+        int_roots = []
+        for r in potential_roots:
+            # Check if imaginary part is tiny
+            if abs(r.imag) < 1e-9:
+                r_real = r.real
+                # Check if it's very close to an integer
+                if abs(r_real - round(r_real)) < 1e-9:
+                    root_val = int(round(r_real))
+                    if root_val > 0:
+                        assert eqn.eval(root_val, 0, 0) == 0
+                        int_roots.append(root_val)
 
-    int_roots = sorted(list(set(int_roots)))  # Remove duplicates
+        int_roots = sorted(list(set(int_roots)))  # Remove duplicates
 
-    if verbose:
-        print(f"Found {len(int_roots)
-                       } potential positive integer roots: {int_roots}")
+        if verbose:
+            print(f"Found {len(int_roots)
+                           } potential positive integer roots: {int_roots}")
 
-    if not int_roots:
-        raise ArithmeticError("Durand-Kerner found no positive integer roots.")
+        if not int_roots:
+            raise ArithmeticError(
+                "Durand-Kerner found no positive integer roots.")
 
-    # Return the "best" root.
-    # pick the one closest to x_guess, or just the smallest.
-    if x_guess is not None:
-        best_root = min(int_roots, key=lambda r: abs(r - x_guess))
-        return best_root
+        # Return the "best" root.
+        # pick the one closest to x_guess, or just the smallest.
+        if x_guess is not None:
+            best_root = min(int_roots, key=lambda r: abs(r - x_guess))
+            return best_root
 
-    return int_roots[0]  # Return the smallest positive integer root
+        return int_roots[0]  # Return the smallest positive integer root

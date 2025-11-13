@@ -98,7 +98,7 @@ class Poly:
                 result += x_val * y_mul * (z ** z_pow) * val
         return result
 
-    def eval_poly(self, x: Poly, y: Poly, z: Poly) -> Poly:
+    def eval_poly(self, x: Poly | int, y: Poly | int, z: Poly | int) -> Poly:
         result = Poly()
         for x_pow in self.coeff.keys():
             x_mul = x ** x_pow
@@ -106,7 +106,7 @@ class Poly:
                 y_mul = y ** y_pow
                 for z_pow, val in y_val.items():
                     z_mul = z ** z_pow
-                    result += x_mul * y_mul * z_mul * Poly(val)
+                    result += x_mul * y_mul * z_mul * val
         return result
 
     def sub_xy(self, xy: Poly) -> Poly:
@@ -123,19 +123,40 @@ class Poly:
                     result += new_xy_mul * z_mul * Poly(val)
         return result
 
-    def __add__(self, other: Poly) -> Poly:
+    def copy(self) -> Poly:
         result = Poly()
         for (coeff, pow) in self.all_coeffs():
             result[pow] = coeff
+        return result
+
+    def __add__(self, other: Poly | int) -> Poly:
+        result = self.copy()
+        if isinstance(other, int):
+            result[0, 0, 0] += other
+            return result
         for (coeff, pow) in other.all_coeffs():
             result[pow] += coeff
         return result
 
-    def __sub__(self, other: Poly) -> Poly:
-        return self + other * Poly(-1)
+    def __sub__(self, other: Poly | int) -> Poly:
+        if isinstance(other, Poly):
+            return self + other * Poly(-1)
+        result = self.copy()
+        result[0, 0, 0] -= other
+        return result
 
-    def __mul__(self, other: Poly) -> Poly:
+    def __neg__(self) -> Poly:
+        return self * -1
+
+    def __rsub__(self, other: int) -> Poly:
+        return self * -1 + other
+
+    def __mul__(self, other: Poly | int) -> Poly:
         result = Poly()
+        if isinstance(other, int):
+            for (coeff, pow) in self.all_coeffs():
+                result[pow] = coeff * other
+            return result
         # Cross product. This is slow, especially since we are allocating a new
         # Poly every term but we shouldn't have too many terms.
         for (coeff1, (x_pow1, y_pow1, z_pow1)) in self.all_coeffs():
@@ -147,6 +168,9 @@ class Poly:
                 )
                 result[new_pow] += coeff1*coeff2
         return result
+
+    def __rmul__(self, other: int) -> Poly:
+        return self * other
 
     def __pow__(self, power: int) -> Poly:
         if power < 0:
@@ -170,8 +194,10 @@ class Poly:
             result[pow] = coeff % mod
         return result
 
-    def __truediv__(self, divisor: Poly) -> Poly:
+    def __truediv__(self, divisor: Poly | int) -> Poly:
         assert self.highest_z_power() == 0
+        if isinstance(divisor, int):
+            divisor = Poly(divisor, (0, 0, 0))
         assert divisor.highest_z_power() == 0
 
         result = Poly()
@@ -214,7 +240,7 @@ class Poly:
         # Find gcd(k, result) so we can divide it.
         for coeff in b.all_coeffs():
             total_k = gcd(total_k, coeff[0])
-        return b / Poly(total_k)
+        return b / total_k
 
     def _div_x(self, divisor: Poly) -> tuple[int, Poly, Poly]:
         """
@@ -242,8 +268,8 @@ class Poly:
             if abs(lead_num) % abs(lead_den) != 0:
                 # Not fully divisible. We multiply by a factor to continue.
                 mul_factor = lead_den // gcd(lead_num, lead_den)
-                numerator *= Poly(mul_factor)
-                result *= Poly(mul_factor)
+                numerator *= mul_factor
+                result *= mul_factor
                 dividend_mul *= mul_factor
                 continue
             factor = Poly(lead_num // lead_den, (num_x_pow-div_x_pow, 0, 0))

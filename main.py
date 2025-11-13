@@ -18,7 +18,7 @@ from wiener_attack import wiener_attack
 
 
 def run_case(
-        e: int, n: int, d: int, p: int, q: int, m: int = 7, t: int = 3,
+        e: int, n: int, d: int, p: int, q: int, m: int = 4, t: int = 3,
 ) -> Tuple[bool, bool, Optional[Tuple[int, int, int]], Optional[Tuple[int, int, int]]]:
     """Run Wiener and Boneh-Durfee on given public key and return results.
 
@@ -44,11 +44,11 @@ def run_case(
     t0 = time.perf_counter()
     # exit after 86400 seconds (24 hours)
     try:
-        expected_x = (e*d-1) // (p-1) // (q-1)
-        expected_y = -p-q
         bd_res = boneh_durfee_attack(
-            n, e, m=m, t=t, delta=0.26, timeout_sec=60, verbose=True,
-            X_assert=expected_x, Y_assert=expected_y,
+            n, e, m=m, t=t, delta=0.26, timeout_sec=60,
+            # verbose=True,
+            # X_assert=(e*d-1) // (p-1) // (q-1),
+            # Y_assert=-p-q,
         )
     except TimeoutError:
         print("Boneh-Durfee: failed (timeout)")
@@ -77,12 +77,12 @@ def main():
     # 2) Medium d (Wiener should fail, Boneh-Durfee succeed)
     print("\n=== Case [2/3]: Medium d ===")
     e_m, n_m, d_m, phi_m, p_m, q_m = gen_mid_key(nbits=nbits)
-    w_m, bd_m, wres_m, bdres_m = run_case(e_m, n_m, d_m, p_m, q_m, m=10, t=4)
+    w_m, bd_m, wres_m, bdres_m = run_case(e_m, n_m, d_m, p_m, q_m)
 
-    # 3) Large d (strong key, both fail)
-    # print("\n=== Case [3/3]: Large d ===")
-    # e_l, n_l, d_l, phi_l, p_l, q_l = gen_large_key(nbits=nbits)
-    # w_l, bd_l, wres_l, bdres_l = run_case(e_l, n_l, d_l)
+    # 3) Large d(strong key, both fail)
+    print("\n=== Case [3/3]: Large d ===")
+    e_l, n_l, d_l, phi_l, p_l, q_l = gen_large_key(nbits=nbits)
+    w_l, bd_l, wres_l, bdres_l = run_case(e_l, n_l, d_l, p_l, q_l)
 
 
 if __name__ == "__main__":
