@@ -1,7 +1,45 @@
+from .complex import Complex, ComplexContext
+from .polynomial import Poly, PolyMat, primitive, primitive_content
 from decimal import MAX_EMAX
-from expression import Complex, ComplexContext, Poly, primitive
-from math import isqrt
+from math import gcd, isqrt
 from typing import Optional, Sequence
+
+
+# Simple variables for ease of use.
+x = Poly(1, (1, 0, 0))
+y = Poly(1, (0, 1, 0))
+z = Poly(1, (0, 0, 1))
+
+
+def remove_x_factor(eqn: Poly) -> Poly:
+    assert eqn.highest_y_power() == 0
+    assert eqn.highest_z_power() == 0
+    result = Poly()
+    lowest_x: int | None = None
+    for x in range(eqn.highest_x_power()+1):
+        coeff = eqn[x, 0, 0]
+        if coeff == 0:
+            continue
+        if lowest_x is None:
+            lowest_x = x
+        result[x-lowest_x, 0, 0] = coeff
+    return result
+
+
+def resultant(a: Poly, b: Poly) -> Poly:
+    self_y = a.highest_y_power()
+    other_y = b.highest_y_power()
+    if self_y + other_y == 0:
+        return Poly(0)
+    sylvester_matrix = PolyMat(self_y + other_y)
+    for i in range(other_y):
+        for y_pow in range(self_y+1):
+            sylvester_matrix[i, i+y_pow] = a.univariate_y(self_y - y_pow)
+    for i in range(self_y):
+        for y_pow in range(other_y+1):
+            sylvester_matrix[i+other_y, i +
+                             y_pow] = b.univariate_y(other_y - y_pow)
+    return sylvester_matrix.det()
 
 
 def linear(eqn: Poly) -> int:
@@ -33,6 +71,8 @@ def quadratic(eqn: Poly) -> tuple[int, int]:
     if (-b-d) % (2*a) != 0:
         raise ArithmeticError("-b-d is not a multiple of 2*a")
     return ((-b - d)//(2*a), (-b+d)//(2*a))
+
+
 
 
 def _simplify(eqn: Poly) -> Poly:
@@ -153,12 +193,7 @@ def first_root(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
         int_roots = sorted(list(set(int_roots)))  # Remove duplicates
 
         if verbose:
-            print(f"Found {len(int_roots)
-                           } potential positive integer roots: {int_roots}")
-
-        if not int_roots:
-            raise ArithmeticError(
-                "Durand-Kerner found no positive integer roots.")
+            print(f"Found {len(int_roots)} potential positive integer roots: {int_roots}")
 
         # Return the "best" root.
         # pick the one closest to x_guess, or just the smallest.

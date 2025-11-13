@@ -1,9 +1,11 @@
 from decimal import Decimal
-from expression import Poly, x, y, z, remove_x_factor, resultant
 from typing import Optional, Tuple
-from solve import first_root, quadratic
 from fpylll import LLL, IntegerMatrix
-
+import sys
+from pathlib import Path
+if __package__ in {None, ""}:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+from mathlib.utils import Poly, x, y, z, remove_x_factor, resultant, first_root, quadratic
 
 def boneh_durfee_attack(
     n: int,
@@ -255,8 +257,10 @@ def _do_lll(
 
 if __name__ == "__main__":
     # Demo: generate a key with small d and attempt Boneh-Durfee recovery
-    from key_generation import gen_mid_key
+    import time
+    from mathlib.key_generation import gen_large_key, gen_mid_key, gen_small_key
 
+    demo_start = time.perf_counter()
     print("[*] Boneh-Durfee Attack Demo")
     print("[*] Generating RSA key with small private exponent...\n")
 
@@ -280,3 +284,5 @@ if __name__ == "__main__":
     else:
         print("\n[-] Attack did not find the private key.")
         print("    (This may happen for keys outside the vulnerability range.)")
+    total_time = time.perf_counter() - demo_start
+    print(f"\nDemo finished in {total_time:.2f}s.")

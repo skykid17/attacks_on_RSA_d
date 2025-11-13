@@ -10,23 +10,17 @@ recover private keys when possible.
   to Wiener's attack.
 - **Wiener's Attack Implementation**: Recover private keys from vulnerable RSA
   moduli using continued fractions.
-- **Boneh Durfee Attack Implementation**: Two polynomial time attacks on small
-  secret exponent RSA. The attack works when d < N^0.292. The attack is based on
-  lattice based Coppersmith's method to find short vectors. It reconstructs
-  integer polynomials from the reduced basis (reconstruct_polynomials) and then
-  finds small roots using algebraic solvers: pairwise gcds (find_roots_gcd) and
-  Groebner‑basis elimination / univariate root finding (find_roots_groebner).
-  The quotient trick (pr.quotient(1 + xy - u) and later substituting u = 1 + xy)
-  is a linearization used in bivariate constructions (Herrmann & May style) to
-  improve speed.
+- **Boneh-Durfee Attack Implementation**: Single streamlined pipeline that
+  builds the Herrmann–May style lattice, reduces it with LLL, and then uses
+  resultant elimination plus an Aberth–Ehrlich root search (all in pure Python)
+  to recover the short secret exponent when `d < N^0.29`.
 - **Demonstration**: Example runs showing successful and failed attacks.
 
 ## Requirements
 - PyCryptodome
-- fpylll (A)
-- SageMath (B)
+- fpylll
 
-## Usage A
+## Usage
 Install dependencies with:
 ```
 conda create -n venv python=3.12 pycryptodome fpylll
@@ -35,18 +29,6 @@ conda activate venv
 Run the demonstration script:
 ```
 python main.py
-```
-
-## Usage B
-Install dependencies with:
-```
-conda config --add channels conda-forge
-conda create -n sage_env python=3.12 sage pycryptodome
-conda activate sage_env
-```
-Run the demonstration script:
-```
-sage -python main.py
 ```
 
 This will:
@@ -66,3 +48,6 @@ This will:
 - Herrmann, M. & May, A. (2010, May 26). Maximizing Small Root Bounds by
   Linearization and Applications to Small Secret Exponent RSA.
   https://doi.org/10.1007/978-3-642-13013-7_4.
+- Aberth, O. (1973). Iteration methods for finding all zeros of a polynomial
+  simultaneously. Matematički Vesnik, 10(1). (Aberth–Ehrlich method used for
+  integer root polishing in `mathlib`).

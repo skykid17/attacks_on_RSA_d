@@ -12,9 +12,9 @@ Boneh-Durfee uses pure-Python polynomial root-finding (no external LLL libraries
 import time
 from typing import Optional, Tuple
 
-from boneh_durfee import boneh_durfee_attack
-from key_generation import gen_large_key, gen_mid_key, gen_small_key
-from wiener_attack import wiener_attack
+from mathlib.key_generation import gen_large_key, gen_mid_key, gen_small_key
+from attacks.wiener import wiener_attack
+from attacks.boneh_durfee import boneh_durfee_attack
 
 
 def run_case(
@@ -25,8 +25,7 @@ def run_case(
     Returns a tuple: (wiener_success, bd_success, wiener_result, bd_result)
     where results are (p,q,d) or None.
     """
-    print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}")
-    print(f"p bits: {p.bit_length()}, q bits: {q.bit_length()}\n")
+    print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}, p bits: {p.bit_length()}, q bits: {q.bit_length()}\n")
 
     # Wiener
     t0 = time.perf_counter()
@@ -67,20 +66,20 @@ def run_case(
 
 def main():
     """Run comparative attack demonstrations on three key types."""
-    nbits = 1024
+    nbits = 2048
 
     # 1) Small d (Wiener vulnerable)
-    print("\n=== Case [1/3]: Small d ===")
+    print("\n===== Case [1/3]: Small d =====")
     e_s, n_s, d_s, phi_s, p_s, q_s = gen_small_key(nbits=nbits)
     w_s, bd_s, wres_s, bdres_s = run_case(e_s, n_s, d_s, p_s, q_s)
 
     # 2) Medium d (Wiener should fail, Boneh-Durfee succeed)
-    print("\n=== Case [2/3]: Medium d ===")
+    print("\n===== Case [2/3]: Medium d =====")
     e_m, n_m, d_m, phi_m, p_m, q_m = gen_mid_key(nbits=nbits)
     w_m, bd_m, wres_m, bdres_m = run_case(e_m, n_m, d_m, p_m, q_m)
 
     # 3) Large d(strong key, both fail)
-    print("\n=== Case [3/3]: Large d ===")
+    print("\n===== Case [3/3]: Large d =====")
     e_l, n_l, d_l, phi_l, p_l, q_l = gen_large_key(nbits=nbits)
     w_l, bd_l, wres_l, bdres_l = run_case(e_l, n_l, d_l, p_l, q_l)
 
