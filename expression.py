@@ -1,5 +1,5 @@
 from complex import Complex, ComplexContext
-from poly import Poly
+from poly import Poly, primitive, primitive_content
 from poly_mat import PolyMat
 
 

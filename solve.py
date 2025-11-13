@@ -1,8 +1,7 @@
 from decimal import MAX_EMAX
-from expression import Complex, ComplexContext, Poly
-from math import gcd, isqrt
+from expression import Complex, ComplexContext, Poly, primitive
+from math import isqrt
 from typing import Optional, Sequence
-import cmath
 
 
 def linear(eqn: Poly) -> int:
@@ -33,7 +32,7 @@ def quadratic(eqn: Poly) -> tuple[int, int]:
         raise ArithmeticError("-b+d is not a multiple of 2*a")
     if (-b-d) % (2*a) != 0:
         raise ArithmeticError("-b-d is not a multiple of 2*a")
-    return ((-b + d)//(2*a), (-b-d)//(2*a))
+    return ((-b - d)//(2*a), (-b+d)//(2*a))
 
 
 def _simplify(eqn: Poly) -> Poly:
@@ -44,17 +43,6 @@ def _simplify(eqn: Poly) -> Poly:
     if gcd_with_der.highest_x_power() > 0:
         return _simplify(eqn / gcd_with_der)
     return eqn
-
-
-def primitive(eqn: Poly) -> Poly:
-    # Simplify polynomial by removing common factors.
-    common = 0
-    for (coeff, _) in eqn.all_coeffs():
-        common = gcd(coeff, common)
-    if eqn[eqn.highest_x_power(), 0, 0] < 0:
-        # Also flip sign if we are x only.
-        common = -common
-    return eqn/common
 
 
 def aberth_ehrlich(
@@ -73,7 +61,8 @@ def aberth_ehrlich(
         return []
 
     # Generate initial root guesses. Spread the guesses out.
-    v = [ctx.create(0.4, 0.9) ** i for i in range(n)]
+    root_scale = ctx.create(coeffs[-1] // coeffs[0]) ** (1/n)
+    v = [ctx.create(0.4, 0.9) ** i * root_scale for i in range(n)]
 
     def poly_eval(coeffs: Sequence[Complex],
                   x: Complex) -> Complex:
@@ -114,6 +103,16 @@ def aberth_ehrlich(
 
 def first_root(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
     assert eqn.highest_y_power() == 0
+    x_pow = eqn.highest_x_power()
+    if x_pow == 1:
+        return linear(eqn)
+    if x_pow == 2:
+        quad_roots = quadratic(eqn)
+        if x_guess is not None:
+            best_root = min(quad_roots, key=lambda r: abs(r - x_guess))
+            return best_root
+        return quad_roots[0]  # Return the smaller root.
+
     eqn = _simplify(eqn)
     coeffs = eqn.get_x_coefficients_desc()
     der_coeffs = eqn.derivative_x().get_x_coefficients_desc()
@@ -121,12 +120,15 @@ def first_root(eqn: Poly, x_guess: Optional[int] = None, verbose=False) -> int:
     if not coeffs or coeffs[0] == 0:
         raise ArithmeticError("Polynomial is zero.")
 
+    root_scale = (len(str(coeffs[-1])) - len(str(coeffs[0]))) // len(coeffs)
+    prec = root_scale * 2 + 50
+
     if verbose:
         print(f"Finding roots for degree {len(coeffs)-1} polynomial...")
+        print(f"Using {prec=}")
 
-    root_scale = (len(str(coeffs[-1])) - len(str(coeffs[0]))) // len(coeffs)
     ctx = ComplexContext(
-        prec=root_scale * 2 + 50,
+        prec=prec,
         Emax=MAX_EMAX,
     )
     with ctx:

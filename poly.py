@@ -224,25 +224,21 @@ class Poly:
     def gcd_x(self, other: Poly) -> Poly:
         assert self.highest_y_power() == 0
         assert other.highest_y_power() == 0
-        a, b = self, other
-        total_k = 1
+        a_content, a = primitive_content(self)
+        b_content, b = primitive_content(other)
         while not a.is_zero():
             # b._div_x(a) returns the result of divmod(kb, a).
             # This means that if k > 1, we are actually calculating
             # gcd(ka, b) where k is not a factor of a.
-            # If gcd(ka, b)=kx, gcd(a, b) is actually x. As such, we store
-            # k to potentially divide it later.
-            k, _, rem = b._div_x(a)
-            total_k *= k
-            a, b = rem, a
-        if total_k == 1:
-            return b
-        # Find gcd(k, result) so we can divide it.
-        for coeff in b.all_coeffs():
-            total_k = gcd(total_k, coeff[0])
-        return b / total_k
+            # As such, we can pull out all content from remainder as it was
+            # primitive all along.
+            _, _, rem = b._div_x(a, rem_only=True)
+            a, b = primitive(rem), a
+        return gcd(a_content, b_content) * b
 
-    def _div_x(self, divisor: Poly) -> tuple[int, Poly, Poly]:
+    def _div_x(self,
+               divisor: Poly,
+               rem_only: bool = False) -> tuple[int, Poly, Poly]:
         """
         _div_x divides two univariate X polynomials. If required, it will
         multiply the numerator by a constant, this is returned as an integer.
@@ -265,16 +261,19 @@ class Poly:
                 # Not fully divisible, return.
                 return dividend_mul, result, numerator
             lead_num = numerator[numerator.highest_x_power(), 0, 0]
-            if abs(lead_num) % abs(lead_den) != 0:
+            quo, rem = divmod(lead_num, lead_den)
+            if rem != 0:
                 # Not fully divisible. We multiply by a factor to continue.
-                mul_factor = lead_den // gcd(lead_num, lead_den)
+                mul_factor = lead_den // gcd(rem, lead_den)
                 numerator *= mul_factor
-                result *= mul_factor
                 dividend_mul *= mul_factor
+                if not rem_only:
+                    result *= mul_factor
                 continue
-            factor = Poly(lead_num // lead_den, (num_x_pow-div_x_pow, 0, 0))
+            factor = Poly(quo, (num_x_pow-div_x_pow, 0, 0))
             numerator -= factor * divisor
-            result += factor
+            if not rem_only:
+                result += factor
         return dividend_mul, result, numerator
 
     def __str__(self) -> str:
@@ -358,3 +357,21 @@ class Poly:
             for y_pow in y_map.keys():
                 max_deg = max(max_deg, x_pow + y_pow)
         return max_deg
+
+
+def primitive_content(eqn: Poly) -> tuple[int, Poly]:
+    if eqn.is_zero():
+        return 0, eqn
+    # Simplify polynomial by removing common factors.
+    common = 0
+    for (coeff, _) in eqn.all_coeffs():
+        common = gcd(coeff, common)
+    if eqn[eqn.highest_x_power(), 0, 0] < 0:
+        # Also flip sign if we are x only.
+        common = -common
+    return common, eqn/common
+
+
+def primitive(eqn: Poly) -> Poly:
+    _, p = primitive_content(eqn)
+    return p
