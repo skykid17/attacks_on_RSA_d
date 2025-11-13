@@ -25,9 +25,8 @@ def run_case(
     Returns a tuple: (wiener_success, bd_success, wiener_result, bd_result)
     where results are (p,q,d) or None.
     """
-    print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}")
-    print(f"p bits: {p.bit_length()}, q bits: {q.bit_length()}\n")
-
+    print(f"n bits: {n.bit_length()}, d bits: {d.bit_length()}, p bits: {p.bit_length()}, q bits: {q.bit_length()}")
+    print(f"Actual d: {d}\n")
     # Wiener
     t0 = time.perf_counter()
     wres = wiener_attack(n, e)
@@ -36,7 +35,8 @@ def run_case(
     print(f"Wiener: {'succeeded' if w_ok else 'failed'} (time {t_w:.3f}s)")
     if w_ok:
         wp, wq, wd = wres
-        print(f"d={wd}\np bits={wp.bit_length()} q bits={wq.bit_length()}\n")
+        print(f"d={wd}")
+    print()
 
     # Boneh-Durfee
     # For keys with small d, k is large, so we need larger search space.
@@ -60,14 +60,14 @@ def run_case(
         f"Boneh-Durfee: {'succeeded' if bd_ok else 'failed'} (time {t_bd:.3f}s)")
     if bd_res is not None:
         bp, bq, bd = bd_res
-        print(f"d={bd}\np bits={bp.bit_length()} q bits={bq.bit_length()}\n")
+        print(f"d={bd}\n")
 
     return w_ok, bd_ok, wres, bd_res
 
 
 def main():
     """Run comparative attack demonstrations on three key types."""
-    nbits = 1024
+    nbits = 2048
 
     # 1) Small d (Wiener vulnerable)
     print("\n=== Case [1/3]: Small d ===")
