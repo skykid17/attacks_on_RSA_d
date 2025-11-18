@@ -44,10 +44,6 @@ def wiener_attack(n, e):
 if __name__ == "__main__":
     # Lightweight self-check to ensure the continued fraction logic holds up.
     import time
-    import sys
-    from pathlib import Path
-    if __package__ in {None, ""}:
-        sys.path.append(str(Path(__file__).resolve().parents[1]))
     from mathlib.key_generation import gen_large_key, gen_mid_key, gen_small_key
     
     demo_start = time.perf_counter()

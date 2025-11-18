@@ -1,10 +1,6 @@
 from decimal import Decimal
 from typing import Optional, Tuple
 from fpylll import LLL, IntegerMatrix
-import sys
-from pathlib import Path
-if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 from mathlib.utils import Poly, x, y, z, remove_x_factor, resultant, first_root, quadratic
 
 def boneh_durfee_attack(

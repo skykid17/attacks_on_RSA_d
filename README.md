@@ -1,7 +1,7 @@
 # SC4010 Project - Attacks on RSA
 
 This project demonstrates Wiener's attack and Boneh Durfee attack on RSA with
-small and relatively small private exponents. It includes scripts for generating
+small and relatively small private exponent d. It includes scripts for generating
 both vulnerable and strong RSA key pairs, and for performing the attack to
 recover private keys when possible.
 
@@ -13,7 +13,7 @@ recover private keys when possible.
 - **Boneh-Durfee Attack Implementation**: Single streamlined pipeline that
   builds the Herrmann–May style lattice, reduces it with LLL, and then uses
   resultant elimination plus an Aberth–Ehrlich root search (all in pure Python)
-  to recover the short secret exponent when `d < N^0.29`.
+  to recover the short secret exponent when `d < N^0.292`.
 - **Demonstration**: Example runs showing successful and failed attacks.
 
 ## Requirements
@@ -38,6 +38,12 @@ This will:
   attack (should fail) and Boneh Durfee attack (should succeed)
 - Generate RSA key with large sized private exponent d and attempt Wiener's
   attack and Boneh Durfee attack (both should fail)
+
+Alternatively, run individual attack scripts:
+```
+python -m attacks.wiener
+python -m attacks.boneh_durfee
+```
 
 ## References
 - Wiener, M. J. (1990). Cryptanalysis of Short RSA Secret Exponents. IEEE
